@@ -42,6 +42,7 @@ export interface Admin {
   isMainAdmin?: boolean;
   isStaffAdmin?: boolean; // New field
   approvedAppName?: string;
+  taxPaid?: boolean;
 }
 
 export interface AppRequest {

@@ -67,19 +67,12 @@ const AgentLogin: React.FC<AgentLoginProps> = ({ onLogin, onCancel }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden"
+        className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden border border-[#E5E5E5]"
       >
-        <button 
-          onClick={onCancel}
-          className="absolute top-6 right-6 p-2 hover:bg-gray-100 rounded-full transition-colors z-10"
-        >
-          <XCircle className="w-6 h-6 text-gray-400" />
-        </button>
-
         <div className="flex flex-col items-center mb-8">
           <div className="w-20 h-20 bg-purple-600 text-white rounded-3xl flex items-center justify-center shadow-lg shadow-purple-600/30 mb-4">
             <Headphones className="w-10 h-10" />

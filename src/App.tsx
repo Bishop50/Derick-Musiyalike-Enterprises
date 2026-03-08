@@ -16,7 +16,8 @@ import {
   HelpCircle,
   RefreshCw,
   Sparkles,
-  Calculator
+  Calculator,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useZoom } from './contexts/ZoomContext';
@@ -36,10 +37,13 @@ import NetworkStatus from './components/NetworkStatus';
 import LocationTracker from './components/LocationTracker';
 import NotificationsPanel from './components/NotificationsPanel';
 import AgentLogin from './components/AgentLogin';
+import LoginFlow from './components/LoginFlow';
+import RegistrationFlow from './components/RegistrationFlow';
 import AIServicesSection from './components/AIServicesSection';
 import TaxSection from './components/TaxSection';
 import LockScreen from './components/LockScreen';
 import VerticalScale from './components/VerticalScale';
+import Onboarding from './components/Onboarding';
 import { Section, User, SystemConfig, AppNotification, Agent } from './types';
 
 const App: React.FC = () => {
@@ -52,17 +56,72 @@ const App: React.FC = () => {
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
   const [showAgentLogin, setShowAgentLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showRecentSearches, setShowRecentSearches] = useState(false);
   const { zoom } = useZoom();
   const [isLocked, setIsLocked] = useState(() => {
     return sessionStorage.getItem('moneylink_is_locked') === 'true';
   });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('moneylink_has_seen_onboarding');
+    if (!hasSeenOnboarding && currentUser) {
+      setShowOnboarding(true);
+    }
+  }, [currentUser]);
+
+  const onboardingSteps = [
+    { targetId: 'nav-home', title: 'Home', description: 'View your dashboard and account overview.' },
+    { targetId: 'nav-apply-loan', title: 'Loans', description: 'Apply for loans and view your active loans.' },
+    { targetId: 'nav-digital-services', title: 'Services', description: 'Access digital financial services.' },
+  ];
+
+  useEffect(() => {
+    const saved = localStorage.getItem('moneylink_recent_searches');
+    if (saved) {
+      setRecentSearches(JSON.parse(saved));
+    }
+  }, []);
+
+  const playNotificationSound = () => {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.play().catch(e => console.warn('Audio playback failed:', e));
+  };
+
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const lastNotification = notifications[0];
+      if (!lastNotification.isRead) {
+        playNotificationSound();
+      }
+    }
+  }, [notifications.length]);
+
+  const handleSearch = (term: string) => {
+    setSearchQuery(term);
+    if (term.trim() && !recentSearches.includes(term.trim())) {
+      const updated = [term.trim(), ...recentSearches].slice(0, 5);
+      setRecentSearches(updated);
+      localStorage.setItem('moneylink_recent_searches', JSON.stringify(updated));
+    }
+    // Logic to navigate or filter based on search
+    if (term.toLowerCase().includes('loan')) setActiveSection('apply-loan');
+    if (term.toLowerCase().includes('service')) setActiveSection('digital-services');
+    if (term.toLowerCase().includes('account')) setActiveSection('account');
+    if (term.toLowerCase().includes('help')) setActiveSection('help');
+    setShowRecentSearches(false);
+  };
 
   // Persist state
   useEffect(() => {
@@ -250,6 +309,8 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('moneylink_current_user', JSON.stringify(user));
+    setShowLogin(false);
+    setActiveSection('home'); // Direct to home page after login
   };
 
   const handleAdminLogin = () => {
@@ -316,6 +377,8 @@ const App: React.FC = () => {
             onAgentLogin={() => setShowAgentLogin(true)}
             onLogout={handleLogout}
             config={config}
+            onShowLogin={() => setShowLogin(true)}
+            onShowRegistration={() => setShowRegistration(true)}
           />
         );
       case 'apply-loan':
@@ -324,7 +387,7 @@ const App: React.FC = () => {
       case 'digital-services':
         return <DigitalServices onBack={() => setActiveSection('home')} currentUser={currentUser} onUpdateUser={handleLogin} config={config} onNavigate={setActiveSection} />;
       case 'account':
-        return <AccountSection onBack={() => setActiveSection('home')} onLogout={handleLogout} currentUser={currentUser} onNavigate={setActiveSection} config={config} />;
+        return <AccountSection onBack={() => setActiveSection('home')} onLogout={handleLogout} currentUser={currentUser} onUpdateUser={handleLogin} onNavigate={setActiveSection} config={config} />;
       case 'trust':
         return <TrustSection onBack={() => setActiveSection('home')} config={config} />;
       case 'transactions':
@@ -344,6 +407,7 @@ const App: React.FC = () => {
       case 'developer':
         return <DeveloperPanel 
           onBack={() => setActiveSection('home')}
+          onUpdateConfig={setConfig}
           onLogout={() => {
             setIsDeveloperMode(false);
             setActiveSection('account');
@@ -370,6 +434,8 @@ const App: React.FC = () => {
           onAgentLogin={() => setShowAgentLogin(true)}
           onLogout={handleLogout} 
           config={config}
+          onShowLogin={() => setShowLogin(true)}
+          onShowRegistration={() => setShowRegistration(true)}
         />;
     }
   };
@@ -381,6 +447,42 @@ const App: React.FC = () => {
           onBack={() => setIsAdminMode(false)}
           onLogout={() => setIsAdminMode(false)} 
           isDeveloper={isDeveloperMode} 
+        />
+      </div>
+    );
+  }
+
+  if (showLogin) {
+    return (
+      <div className="min-h-screen bg-white">
+        <LoginFlow 
+          appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
+          onLogin={handleLogin}
+          onAdminLogin={handleAdminLogin}
+          onCancel={() => setShowLogin(false)}
+          onSwitchToRegister={() => {
+            setShowLogin(false);
+            setShowRegistration(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (showRegistration) {
+    return (
+      <div className="min-h-screen bg-white">
+        <RegistrationFlow 
+          appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
+          onComplete={(user) => {
+            handleLogin(user);
+            setShowRegistration(false);
+          }}
+          onCancel={() => setShowRegistration(false)}
+          onSwitchToLogin={() => {
+            setShowRegistration(false);
+            setShowLogin(true);
+          }}
         />
       </div>
     );
@@ -508,7 +610,46 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-                        <NetworkStatus />
+            <div className="hidden md:block relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]">
+                <Search className="w-4 h-4" />
+              </div>
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowRecentSearches(true)}
+                onBlur={() => setTimeout(() => setShowRecentSearches(false), 200)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
+                placeholder="Search services..."
+                className={`pl-10 pr-4 py-2 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-[#F8F9FA] border-[#F0F0F0]'} border rounded-xl text-xs font-bold focus:outline-none focus:border-green-700 w-64 transition-all`}
+              />
+              <AnimatePresence>
+                {showRecentSearches && recentSearches.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className={`absolute top-full left-0 right-0 mt-2 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#F0F0F0]'} border rounded-xl shadow-xl z-[60] overflow-hidden`}
+                  >
+                    <div className="p-2">
+                      <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest px-2 py-1">Recent Searches</p>
+                      {recentSearches.map((term, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleSearch(term)}
+                          className={`w-full text-left px-3 py-2 text-xs font-bold ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-[#F8F9FA]'} rounded-lg transition-colors flex items-center gap-2`}
+                        >
+                          <RefreshCw className="w-3 h-3 text-[#999]" />
+                          {term}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <NetworkStatus />
             <button 
               onClick={() => setIsNotificationsOpen(true)}
               className="p-2 hover:bg-[#F0F0F0] rounded-full transition-colors relative"
@@ -676,7 +817,10 @@ const App: React.FC = () => {
                 <p className="text-sm text-[#666]">A new version of {config?.appName} is available. Please update to continue using the latest features.</p>
               </div>
               <button 
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  // Simply close the modal instead of reloading
+                  setShowSplash(false);
+                }}
                 className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-600/20"
               >
                 UPDATE_NOW
@@ -699,6 +843,7 @@ const App: React.FC = () => {
           {navItems.map((item) => (
             <NavButton 
               key={item.id}
+              id={item.id}
               active={activeSection === item.id || (item.id === 'apply-loan' && activeSection === 'my-loans')} 
               icon={item.icon} 
               label={item.label} 
@@ -708,19 +853,31 @@ const App: React.FC = () => {
           ))}
         </div>
       </nav>
+
+      {showOnboarding && (
+        <Onboarding 
+          steps={onboardingSteps} 
+          onComplete={() => {
+            setShowOnboarding(false);
+            localStorage.setItem('moneylink_has_seen_onboarding', 'true');
+          }} 
+        />
+      )}
     </div>
   );
 };
 
 interface NavButtonProps {
+  id: string;
   active: boolean;
   icon: React.ElementType;
   label: string;
   onClick: () => void;
 }
 
-const NavButton: React.FC<NavButtonProps & { isDarkMode: boolean }> = ({ active, icon: Icon, label, onClick, isDarkMode }) => (
+const NavButton: React.FC<NavButtonProps & { isDarkMode: boolean }> = ({ id, active, icon: Icon, label, onClick, isDarkMode }) => (
   <button 
+    id={`nav-${id}`}
     onClick={onClick}
     className={`flex flex-col items-center gap-1.5 transition-all relative group ${active ? 'text-green-700' : isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-[#999] hover:text-[#666]'}`}
   >

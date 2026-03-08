@@ -159,22 +159,15 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative"
+        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative border border-[#E5E5E5]"
       >
-        <button 
-          onClick={onCancel}
-          className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full transition-colors z-10"
-        >
-          <X className="w-5 h-5 text-[#999]" />
-        </button>
-
         <div className="p-8">
           <div className="space-y-6">
-            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center overflow-hidden shadow-sm border border-[#F0F0F0]">
+            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto border-4 border-green-100 shadow-xl overflow-hidden">
               <img 
                 src={appConfig.logo} 
                 alt="Logo" 
@@ -187,7 +180,7 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
             
             {step === 'login' && (
               <>
-                <div>
+                <div className="text-center">
                   <h2 className="text-2xl font-bold">Welcome Back</h2>
                   <p className="text-[#666] text-sm mt-2 leading-relaxed">
                     Log in to your {appConfig.name} account to continue.
@@ -230,6 +223,7 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
                       }}
                       className="w-full pl-16 pr-12 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-lg font-medium focus:outline-none focus:border-green-700 transition-colors"
                       placeholder="Password"
+                      onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                     />
                     <button 
                       onClick={() => setShowPassword(!showPassword)}

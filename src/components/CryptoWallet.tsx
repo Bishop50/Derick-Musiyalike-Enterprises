@@ -59,7 +59,10 @@ const CryptoWallet: React.FC<CryptoWalletProps> = ({ isOpen, onClose }) => {
 
       // Listen for chain changes
       ethereum.on('chainChanged', (_chainId: string) => {
-        window.location.reload();
+        setAccount(null);
+        setBalance(null);
+        setChainId(_chainId);
+        connectWallet(); // Re-connect on chain change
       });
 
     } catch (err: any) {

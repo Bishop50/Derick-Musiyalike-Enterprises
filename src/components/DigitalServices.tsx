@@ -51,6 +51,11 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
   const [isVerifying, setIsVerifying] = useState(false);
   const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([]);
   const [showCryptoWallet, setShowCryptoWallet] = useState(false);
+  const [showInvestmentModal, setShowInvestmentModal] = useState(false);
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [showRemittanceModal, setShowRemittanceModal] = useState(false);
+  const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
 
   useEffect(() => {
     const fetchRecurringPayments = async () => {
@@ -241,12 +246,12 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
   const services = [
     { id: 'pay-bills', label: 'Pay Bills', icon: CreditCard, desc: 'Electricity, Water, TV', action: () => document.getElementById('quick-pay')?.scrollIntoView({ behavior: 'smooth' }) },
     { id: 'history', label: 'Transaction History', icon: History, desc: 'Track your spending', action: () => onNavigate('transactions') },
-    { id: 'advisory', label: 'Business Advisory', icon: Lightbulb, desc: 'Expert financial tips', action: () => alert('Advisory feature coming soon') },
-    { id: 'investment', label: 'Investment Plans', icon: TrendingUp, desc: 'Grow your wealth', action: () => alert('Investment feature coming soon') },
-    { id: 'partner', label: 'Partner With Us', icon: Handshake, desc: 'Business opportunities', action: () => alert('Partner feature coming soon') },
-    { id: 'remittance', label: 'International Remittance', icon: Smartphone, desc: 'Send money abroad', action: () => alert('Remittance feature coming soon') },
-    { id: 'insurance', label: 'Micro Insurance', icon: Shield, desc: 'Protect your assets', action: () => alert('Insurance feature coming soon') },
-    { id: 'rewards', label: 'Loyalty Rewards', icon: Gift, desc: 'Earn points on every spend', action: () => alert('Rewards feature coming soon') },
+    { id: 'advisory', label: 'Business Advisory', icon: Lightbulb, desc: 'Expert financial tips', action: () => onNavigate('ai-lab') },
+    { id: 'investment', label: 'Investment Plans', icon: TrendingUp, desc: 'Grow your wealth', action: () => setShowInvestmentModal(true) },
+    { id: 'partner', label: 'Partner With Us', icon: Handshake, desc: 'Business opportunities', action: () => setShowPartnerModal(true) },
+    { id: 'remittance', label: 'International Remittance', icon: Smartphone, desc: 'Send money abroad', action: () => setShowRemittanceModal(true) },
+    { id: 'insurance', label: 'Micro Insurance', icon: Shield, desc: 'Protect your assets', action: () => setShowInsuranceModal(true) },
+    { id: 'rewards', label: 'Loyalty Rewards', icon: Gift, desc: 'Earn points on every spend', action: () => setShowRewardsModal(true) },
     { id: 'share-earn', label: 'Share & Earn', icon: Target, desc: 'Share App & Earn', action: handleShareApp },
   ];
 
@@ -593,6 +598,311 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
         )}
       </AnimatePresence>
 
+      {/* Rewards Modal */}
+      <AnimatePresence>
+        {showRewardsModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-black"
+            >
+              <button 
+                onClick={() => setShowRewardsModal(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-[#F8F9FA] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center space-y-6">
+                <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto">
+                  <Gift className="w-10 h-10 text-yellow-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">Loyalty Rewards</h2>
+                  <p className="text-[#666] text-sm mt-2">Earn points on every transaction and redeem for cash or discounts.</p>
+                </div>
+
+                <div className="bg-[#F8F9FA] p-6 rounded-3xl border border-[#E5E5E5]">
+                  <p className="text-xs font-bold text-[#999] uppercase tracking-widest mb-1">Current Points</p>
+                  <p className="text-4xl font-black text-green-700">1,250</p>
+                  <p className="text-[10px] text-[#666] mt-2">Value: K 12.50</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-white border border-[#F0F0F0] rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
+                        <Target className="w-4 h-4 text-green-700" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold">Daily Login</p>
+                        <p className="text-[10px] text-[#999]">Earn 10 points daily</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        alert('Daily login points claimed! +10 points');
+                        setShowRewardsModal(false);
+                      }}
+                      className="px-3 py-1 bg-green-700 text-white rounded-lg text-[10px] font-bold"
+                    >
+                      CLAIM
+                    </button>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setShowRewardsModal(false)}
+                  className="w-full bg-[#F8F9FA] border border-[#E5E5E5] py-4 rounded-2xl font-bold text-sm hover:bg-[#F0F0F0] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Insurance Modal */}
+      <AnimatePresence>
+        {showInsuranceModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-black"
+            >
+              <button 
+                onClick={() => setShowInsuranceModal(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-[#F8F9FA] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
+                    <Shield className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">Micro Insurance</h2>
+                    <p className="text-xs text-[#666]">Affordable protection for you and your family.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {[
+                    { name: 'Life Cover', price: 'K 50/mo', desc: 'Up to K 50,000 cover' },
+                    { name: 'Health Cover', price: 'K 100/mo', desc: 'Inpatient & Outpatient' },
+                    { name: 'Asset Protection', price: 'K 30/mo', desc: 'Cover for your gadgets' }
+                  ].map((plan, i) => (
+                    <button key={i} className="w-full p-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl hover:border-blue-600 transition-all text-left group">
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="font-bold text-sm group-hover:text-blue-600">{plan.name}</p>
+                        <p className="text-xs font-black text-blue-600">{plan.price}</p>
+                      </div>
+                      <p className="text-[10px] text-[#999]">{plan.desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                <button 
+                  onClick={() => setShowInsuranceModal(false)}
+                  className="w-full bg-[#F8F9FA] border border-[#E5E5E5] py-4 rounded-2xl font-bold text-sm hover:bg-[#F0F0F0] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Remittance Modal */}
+      <AnimatePresence>
+        {showRemittanceModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-black"
+            >
+              <button 
+                onClick={() => setShowRemittanceModal(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-[#F8F9FA] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                    <Smartphone className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">International Remittance</h2>
+                    <p className="text-xs text-[#666]">Send money to over 50 countries instantly.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#999] uppercase tracking-widest mb-2">Recipient Country</label>
+                    <select className="w-full bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-600">
+                      <option>South Africa</option>
+                      <option>United Kingdom</option>
+                      <option>USA</option>
+                      <option>China</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#999] uppercase tracking-widest mb-2">Amount (ZMW)</label>
+                    <input type="number" placeholder="0.00" className="w-full bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-600" />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      alert('Remittance request submitted successfully!');
+                      setShowRemittanceModal(false);
+                    }}
+                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg shadow-indigo-600/20"
+                  >
+                    SEND_MONEY
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setShowRemittanceModal(false)}
+                  className="w-full bg-[#F8F9FA] border border-[#E5E5E5] py-4 rounded-2xl font-bold text-sm hover:bg-[#F0F0F0] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Partner Modal */}
+      <AnimatePresence>
+        {showPartnerModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-black"
+            >
+              <button 
+                onClick={() => setShowPartnerModal(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-[#F8F9FA] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center space-y-6">
+                <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
+                  <Handshake className="w-10 h-10 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">Partner With Us</h2>
+                  <p className="text-[#666] text-sm mt-2">Become a MoneyLink agent or merchant and grow your business with us.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => {
+                      alert('Agent application submitted! Our team will contact you shortly.');
+                      setShowPartnerModal(false);
+                    }}
+                    className="w-full p-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl hover:border-emerald-600 transition-all text-left"
+                  >
+                    <p className="font-bold text-sm">Become an Agent</p>
+                    <p className="text-[10px] text-[#999]">Earn commissions on every transaction.</p>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      alert('Merchant application submitted! Our team will contact you shortly.');
+                      setShowPartnerModal(false);
+                    }}
+                    className="w-full p-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl hover:border-emerald-600 transition-all text-left"
+                  >
+                    <p className="font-bold text-sm">Merchant Solutions</p>
+                    <p className="text-[10px] text-[#999]">Accept payments from MoneyLink users.</p>
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setShowPartnerModal(false)}
+                  className="w-full bg-[#F8F9FA] border border-[#E5E5E5] py-4 rounded-2xl font-bold text-sm hover:bg-[#F0F0F0] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Investment Modal */}
+      <AnimatePresence>
+        {showInvestmentModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-black"
+            >
+              <button 
+                onClick={() => setShowInvestmentModal(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-[#F8F9FA] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-green-700" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">Investment Plans</h2>
+                    <p className="text-xs text-[#666]">Grow your wealth with our tailored plans.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {[
+                    { name: 'Fixed Deposit', rate: '15% p.a.', desc: 'Secure your savings for 12 months' },
+                    { name: 'Money Market', rate: '12% p.a.', desc: 'Flexible withdrawals anytime' },
+                    { name: 'Equity Fund', rate: 'Variable', desc: 'Invest in top performing stocks' }
+                  ].map((plan, i) => (
+                    <button key={i} className="w-full p-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl hover:border-green-700 transition-all text-left group">
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="font-bold text-sm group-hover:text-green-700">{plan.name}</p>
+                        <p className="text-xs font-black text-green-700">{plan.rate}</p>
+                      </div>
+                      <p className="text-[10px] text-[#999]">{plan.desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                <button 
+                  onClick={() => setShowInvestmentModal(false)}
+                  className="w-full bg-[#F8F9FA] border border-[#E5E5E5] py-4 rounded-2xl font-bold text-sm hover:bg-[#F0F0F0] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Crypto Wallet Modal */}
       <AnimatePresence>
         {showCryptoWallet && (
@@ -610,7 +920,10 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
           <p className="text-white/60 text-xs leading-relaxed mb-6 max-w-[200px]">
             Earn up to 15% annual returns with our managed investment plans.
           </p>
-          <button className="bg-green-700 hover:bg-green-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">
+          <button 
+            onClick={() => setShowInvestmentModal(true)}
+            className="bg-green-700 hover:bg-green-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all"
+          >
             Explore Plans
           </button>
         </div>

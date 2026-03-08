@@ -1,6 +1,9 @@
 import { GoogleGenAI, ThinkingLevel, Modality, Type } from "@google/genai";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const getAI = () => {
+  const key = localStorage.getItem('gemini_api_key') || process.env.GEMINI_API_KEY || '';
+  return new GoogleGenAI({ apiKey: key });
+};
 
 export const generateAIResponse = async (prompt: string, context: string = "") => {
   try {

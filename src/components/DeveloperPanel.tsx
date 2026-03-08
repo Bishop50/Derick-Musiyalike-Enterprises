@@ -55,11 +55,12 @@ import ZoomControl from './ZoomControl';
 interface DeveloperPanelProps {
   onLogout: () => void;
   onBack?: () => void;
+  onUpdateConfig?: (config: SystemConfig) => void;
 }
 
 import { sendPushNotification } from '../utils/notifications';
 
-const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ onLogout, onBack }) => {
+const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ onLogout, onBack, onUpdateConfig }) => {
   const [activePanel, setActivePanel] = useState<'system' | 'users' | 'agents' | 'ai' | 'database' | 'logs' | 'toolbox' | 'invitations' | 'memory' | 'admins' | 'app-requests' | 'meetings' | 'tools' | 'streaming' | 'storage' | 'browser' | 'code-editor' | 'ai-publish' | 'loan-requests'>('system');
   const [config, setConfig] = useState<SystemConfig>({
     appName: 'MoneyLink Financial',
@@ -155,6 +156,30 @@ Development Team`);
   ]);
   const [dbKeys, setDbKeys] = useState<{key: string, value: string}[]>([]);
   const [logs, setLogs] = useState<{time: string, msg: string, type: 'info' | 'warn' | 'error'}[]>([]);
+  
+  const playNotificationSound = () => {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.play().catch(e => console.warn('Audio playback failed:', e));
+  };
+
+  useEffect(() => {
+    if (appRequests.length > 0) {
+      const last = appRequests[0];
+      if (last.status === 'pending') {
+        playNotificationSound();
+      }
+    }
+  }, [appRequests.length]);
+
+  useEffect(() => {
+    if (loanRequests.length > 0) {
+      const last = loanRequests[0];
+      if (last.status === 'pending') {
+        playNotificationSound();
+      }
+    }
+  }, [loanRequests.length]);
+
   const [featureFlags, setFeatureFlags] = useState({
     darkMode: false,
     experimentalUI: false,
@@ -335,6 +360,7 @@ Development Team`);
 
   const saveConfig = async () => {
     localStorage.setItem('moneylink_config', JSON.stringify(config));
+    if (onUpdateConfig) onUpdateConfig(config);
     
     try {
       await fetch('/api/system-config', {
@@ -344,8 +370,6 @@ Development Team`);
       });
       addLog('System Configuration Synced to Backend', 'info');
       alert('System Configuration Updated Successfully!');
-      // Reload to apply changes globally if needed, or rely on state
-      window.location.reload(); 
     } catch (error) {
       console.error('Failed to sync config:', error);
       alert('Saved locally, but failed to sync to backend.');
@@ -450,8 +474,8 @@ Development Team`);
     if (confirm('CRITICAL: This will wipe ALL user data and system logs. Proceed?')) {
       localStorage.clear();
       addLog('SYSTEM_WIPE_EXECUTED', 'error');
-      alert('System Data Wiped. Reloading...');
-      window.location.reload();
+      alert('System Data Wiped.');
+      onLogout();
     }
   };
 
@@ -1730,6 +1754,7 @@ Development Team`);
                         <p className="font-bold text-sm">{agent.name}</p>
                         <p className="text-[10px] text-white/40">{agent.phone} | {agent.status.toUpperCase()}</p>
                         <p className="text-[8px] text-blue-400 font-bold mt-1">ADMIN_ID: {agent.adminId}</p>
+                        <p className="text-[8px] text-red-400 font-bold mt-1">Password: {agent.password || 'N/A'}</p>
                       </div>
                       <div className="flex gap-2">
                         <button 
@@ -1751,6 +1776,10 @@ Development Team`);
                         </button>
                         <button 
                           onClick={async () => {
+                            if (!admins[0]?.taxPaid) {
+                              alert('Please pay your tax before deleting agents.');
+                              return;
+                            }
                             if (confirm('Permanently delete this agent?')) {
                               await fetch(`/api/agents/${agent.id}`, { method: 'DELETE' });
                               setAgents(prev => prev.filter(a => a.id !== agent.id));

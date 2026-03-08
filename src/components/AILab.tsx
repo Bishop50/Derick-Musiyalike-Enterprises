@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Sparkles, Send, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Sparkles, Send, CheckCircle, XCircle, Clock, FileText, ArrowLeft, Key, Save } from 'lucide-react';
 import { Role, AIPublishRequest } from '../types';
 import { generateAIResponse } from '../services/aiService';
 
@@ -16,6 +16,8 @@ const AILab: React.FC<AILabProps> = ({ currentUser, role, onBack }) => {
   const [title, setTitle] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [requests, setRequests] = useState<AIPublishRequest[]>([]);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [showKeyInput, setShowKeyInput] = useState(false);
 
   useEffect(() => {
     const fetchRequests = () => {
@@ -28,6 +30,12 @@ const AILab: React.FC<AILabProps> = ({ currentUser, role, onBack }) => {
     };
     fetchRequests();
   }, [role, currentUser]);
+
+  const handleSaveKey = () => {
+    localStorage.setItem('gemini_api_key', apiKey);
+    setShowKeyInput(false);
+    alert('Gemini API Key saved successfully!');
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -114,7 +122,53 @@ const AILab: React.FC<AILabProps> = ({ currentUser, role, onBack }) => {
           <h1 className="text-3xl font-bold tracking-tight">AI Lab</h1>
           <p className="text-[#666] text-sm">Generate and publish content using AI.</p>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button 
+            onClick={() => setShowKeyInput(!showKeyInput)}
+            className={`p-3 rounded-xl border transition-all flex items-center gap-2 text-xs font-bold ${
+              apiKey ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'
+            }`}
+          >
+            <Key className="w-4 h-4" />
+            {apiKey ? 'API_KEY_ACTIVE' : 'SET_API_KEY'}
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {showKeyInput && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm space-y-4">
+              <div className="flex items-center gap-3">
+                <Key className="w-5 h-5 text-amber-600" />
+                <h2 className="text-lg font-bold">Gemini API Configuration</h2>
+              </div>
+              <p className="text-xs text-[#666]">Enter your Gemini API key to enable AI features. Your key is stored locally on your device.</p>
+              <div className="flex gap-2">
+                <input 
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your Gemini API key..."
+                  className="flex-1 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-600"
+                />
+                <button 
+                  onClick={handleSaveKey}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  SAVE_KEY
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Generator Section */}

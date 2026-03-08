@@ -106,8 +106,53 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+  
+  const playNotificationSound = () => {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.play().catch(e => console.warn('Audio playback failed:', e));
+  };
+
+  useEffect(() => {
+    if (adminNotifications.length > 0) {
+      const last = adminNotifications[0];
+      if (!last.isRead) {
+        playNotificationSound();
+      }
+    }
+  }, [adminNotifications.length]);
+
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      const last = chatMessages[chatMessages.length - 1];
+      if (last.senderId !== 'admin') {
+        playNotificationSound();
+      }
+    }
+  }, [chatMessages.length]);
+
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showDocModal, setShowDocModal] = useState<{ type: string, url: string } | null>(null);
+  const [showMapModal, setShowMapModal] = useState<{ lat: number, lng: number } | null>(null);
+  const [newUser, setNewUser] = useState({ name: '', phone: '', nrc: '', password: '' });
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [recurringPayments, setRecurringPayments] = useState<any[]>([]);
+  
+  const handleCreateUser = () => {
+    const user: User = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newUser.name,
+      phone: newUser.phone,
+      nrc: newUser.nrc,
+      password: newUser.password,
+      isRegistered: true,
+      balance: 0,
+      isVerified: false,
+    };
+    setUsers([...users, user]);
+    localStorage.setItem('moneylink_users', JSON.stringify([...users, user]));
+    setShowCreateUserModal(false);
+    setNewUser({ name: '', phone: '', nrc: '', password: '' });
+  };
   const [currentAdminId, setCurrentAdminId] = useState<string | null>(null);
   const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
   const [requestedAppName, setRequestedAppName] = useState('');
@@ -830,6 +875,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
             body: JSON.stringify(updatedUser)
           });
           setUsers(users.map(u => u.id === request.userId ? updatedUser : u));
+
+          // Send Notification to User
+          const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+          userNotifications.push({
+            id: Math.random().toString(36).substr(2, 9),
+            userId: request.userId,
+            title: 'Loan Approved',
+            message: `Your loan of K ${request.amount} has been approved and added to your balance.`,
+            date: new Date().toLocaleString(),
+            isRead: false,
+            type: 'loan'
+          });
+          localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
         }
         
         downloadLoanApproval(request);
@@ -962,11 +1020,38 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       const updatedMessages = [...chatMessages, msg];
       setChatMessages(updatedMessages);
       setNewMessage('');
+
+      // Send Notification to User
+      const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+      userNotifications.push({
+        id: Math.random().toString(36).substr(2, 9),
+        userId: selectedUserForChat.id,
+        title: 'New Message from Support',
+        message: newMessage.length > 50 ? newMessage.substring(0, 47) + '...' : newMessage,
+        date: new Date().toLocaleString(),
+        isRead: false,
+        type: 'chat'
+      });
+      localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
     } catch (error) {
       console.error('Failed to send message via API, falling back to local storage', error);
       const updatedMessages = [...chatMessages, msg];
       setChatMessages(updatedMessages);
       localStorage.setItem('moneylink_chats', JSON.stringify(updatedMessages));
+      
+      // Send Notification to User (Fallback)
+      const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+      userNotifications.push({
+        id: Math.random().toString(36).substr(2, 9),
+        userId: selectedUserForChat.id,
+        title: 'New Message from Support',
+        message: newMessage.length > 50 ? newMessage.substring(0, 47) + '...' : newMessage,
+        date: new Date().toLocaleString(),
+        isRead: false,
+        type: 'chat'
+      });
+      localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
+      
       setNewMessage('');
     }
   };
@@ -1000,6 +1085,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
         req.id === requestId ? updatedRequest : req
       );
       setLoanRequests(updatedRequests);
+
+      // Send Notification to User
+      const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+      userNotifications.push({
+        id: Math.random().toString(36).substr(2, 9),
+        userId: request.userId,
+        title: 'Loan Rejected',
+        message: `Your loan request for K ${request.amount} has been rejected. Please contact support for more details.`,
+        date: new Date().toLocaleString(),
+        isRead: false,
+        type: 'loan'
+      });
+      localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
+
       sendPushNotification('Loan Rejected', { body: `Loan request ${requestId} has been rejected.` });
     } catch (error) {
       console.error('Failed to reject loan via API, falling back to local storage', error);
@@ -1008,6 +1107,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       );
       setLoanRequests(updatedRequests);
       localStorage.setItem('moneylink_loan_requests', JSON.stringify(updatedRequests));
+    }
+  };
+
+  const handleRemove = async (requestId: string) => {
+    if (confirm('Are you sure you want to remove this loan request?')) {
+      try {
+        await fetch(`/api/loan-requests/${requestId}`, { method: 'DELETE' });
+        setLoanRequests(loanRequests.filter(r => r.id !== requestId));
+        localStorage.setItem('moneylink_loan_requests', JSON.stringify(loanRequests.filter(r => r.id !== requestId)));
+      } catch (error) {
+        console.error('Failed to remove loan request', error);
+        alert('Failed to remove loan request.');
+      }
     }
   };
 
@@ -1734,6 +1846,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
               </div>
             ) : activeTab === 'users' ? (
               <div className="overflow-x-auto">
+                <div className="p-6 border-b border-[#F0F0F0] flex justify-end">
+                  <button onClick={() => setShowCreateUserModal(true)} className="px-4 py-2 bg-green-700 text-white rounded-xl text-sm font-bold flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    CREATE USER
+                  </button>
+                </div>
                 <table className="w-full text-left">
                 <thead>
                   <tr className="bg-[#F8F9FA] text-[#999] text-[10px] uppercase font-bold tracking-widest">
@@ -1767,21 +1885,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       </td>
                       <td className="px-6 py-4">
                         {user.location ? (
-                          <a 
-                            href={`https://www.google.com/maps?q=${user.location.lat},${user.location.lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button 
+                            onClick={() => setShowMapModal({ lat: user.location!.lat, lng: user.location!.lng })}
                             className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline"
                           >
                             <MapPin className="w-3 h-3" />
                             VIEW_MAP
-                          </a>
+                          </button>
                         ) : (
                           <span className="text-[10px] text-[#999] font-bold">NO_DATA</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {user.nrcFront && <button onClick={() => setShowDocModal({ type: 'NRC Front', url: user.nrcFront! })} className="p-2 bg-gray-100 rounded-xl"><ImageIcon className="w-4 h-4" /></button>}
+                          {user.selfiePhoto && <button onClick={() => setShowDocModal({ type: 'Selfie', url: user.selfiePhoto! })} className="p-2 bg-gray-100 rounded-xl"><ImageIcon className="w-4 h-4" /></button>}
                           <button 
                             onClick={() => setEditingUser(user)}
                             className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"
@@ -1967,7 +2085,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       <p className="font-bold text-sm">{new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</p>
                     </div>
                     <button 
-                      onClick={() => alert('Tax Filing Portal Opening...')}
+                      onClick={() => {
+                        const confirmFiling = confirm('Are you sure you want to file the monthly return? This will generate a compliance certificate.');
+                        if (confirmFiling) {
+                          alert('Monthly return filed successfully! Compliance certificate generated.');
+                        }
+                      }}
                       className="p-4 bg-green-700 text-white rounded-2xl font-bold text-xs hover:bg-green-800 transition-all shadow-lg shadow-green-700/20"
                     >
                       FILE_MONTHLY_RETURN
@@ -2127,6 +2250,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                           <div>
                             <p className="font-bold text-sm">{user.name}</p>
                             <p className="text-[10px] text-[#999]">{user.phone}</p>
+                            <p className="text-[10px] text-red-600 font-bold">Password: {user.password || 'N/A'}</p>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
@@ -2485,6 +2609,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                   </button>
                 </div>
               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {showCreateUserModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white p-8 rounded-2xl w-full max-w-sm space-y-4">
+                <h2 className="text-xl font-bold">Create New User</h2>
+                <input type="text" placeholder="Name" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <input type="text" placeholder="Phone" value={newUser.phone} onChange={e => setNewUser({...newUser, phone: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <input type="text" placeholder="NRC" value={newUser.nrc} onChange={e => setNewUser({...newUser, nrc: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <input type="password" placeholder="Password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <div className="flex gap-2">
+                  <button onClick={() => setShowCreateUserModal(false)} className="flex-1 p-3 bg-gray-100 rounded-xl font-bold">Cancel</button>
+                  <button onClick={handleCreateUser} className="flex-1 p-3 bg-green-700 text-white rounded-xl font-bold">Create</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {showDocModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white p-8 rounded-2xl w-full max-w-2xl space-y-4">
+                <h2 className="text-xl font-bold">{showDocModal.type}</h2>
+                <img src={showDocModal.url} alt={showDocModal.type} className="w-full rounded-2xl" />
+                <button onClick={() => setShowDocModal(null)} className="w-full p-3 bg-gray-100 rounded-xl font-bold">Close</button>
+              </div>
+            </div>
+          )}
+          {showMapModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white p-8 rounded-2xl w-full max-w-2xl space-y-4">
+                <h2 className="text-xl font-bold">User Location</h2>
+                <iframe 
+                  src={`https://maps.google.com/maps?q=${showMapModal.lat},${showMapModal.lng}&z=15&output=embed`}
+                  className="w-full h-96 rounded-2xl"
+                />
+                <button onClick={() => setShowMapModal(null)} className="w-full p-3 bg-gray-100 rounded-xl font-bold">Close</button>
+              </div>
             </div>
           )}
         </AnimatePresence>

@@ -9,6 +9,7 @@ interface LocationTrackerProps {
 
 const LocationTracker: React.FC<LocationTrackerProps> = ({ currentUser, config }) => {
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -98,7 +99,7 @@ const LocationTracker: React.FC<LocationTrackerProps> = ({ currentUser, config }
     } else {
       setError("Geolocation is not supported by this browser.");
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, retryCount]);
 
   if (!currentUser || !error) return null;
 
@@ -113,12 +114,6 @@ const LocationTracker: React.FC<LocationTrackerProps> = ({ currentUser, config }
           <p className="text-xs text-amber-700 leading-relaxed font-medium">
             {error} {config.appName} requires active location services for secure digital connections and fraud prevention.
           </p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-3 text-[10px] font-black text-amber-900 uppercase tracking-widest hover:underline"
-          >
-            Retry Connection
-          </button>
         </div>
       </div>
     </div>

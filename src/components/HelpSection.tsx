@@ -50,7 +50,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ onBack }) => {
             </div>
             <div>
               <p className="text-xs font-bold uppercase opacity-70">Phone Support</p>
-              <p className="font-mono font-bold">+260 977 123 456</p>
+              <p className="font-mono font-bold">+260777382032</p>
             </div>
           </div>
           
@@ -60,7 +60,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ onBack }) => {
             </div>
             <div>
               <p className="text-xs font-bold uppercase opacity-70">Email Support</p>
-              <p className="font-mono font-bold">support@moneylink.zm</p>
+              <p className="font-mono font-bold">info@moneylink.co.zm</p>
             </div>
           </div>
         </div>

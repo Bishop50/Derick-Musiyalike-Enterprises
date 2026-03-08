@@ -23,8 +23,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Section, Transaction, User, LoanRequest, SystemConfig } from '../types';
 import DataList from './DataList';
-import RegistrationFlow from './RegistrationFlow';
-import LoginFlow from './LoginFlow';
 import QuickActionButton from './QuickActionButton';
 import LiveMeeting from './LiveMeeting';
 import SupportChat from './SupportChat';
@@ -38,11 +36,11 @@ interface HomeProps {
   onAgentLogin: () => void;
   onLogout: () => void;
   config: SystemConfig;
+  onShowLogin: () => void;
+  onShowRegistration: () => void;
 }
 
-const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogin, onAdminLogin, onAgentLogin, onLogout, config }) => {
-  const [showRegFlow, setShowRegFlow] = useState(false);
-  const [showLoginFlow, setShowLoginFlow] = useState(false);
+const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogin, onAdminLogin, onAgentLogin, onLogout, config, onShowLogin, onShowRegistration }) => {
   const [showLoanModal, setShowLoanModal] = useState(false);
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [showLiveMeeting, setShowLiveMeeting] = useState(false);
@@ -78,12 +76,10 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
 
   const handleLogin = (user: User) => {
     onLogin(user);
-    setShowLoginFlow(false);
   };
 
   const handleAdminLogin = () => {
     onAdminLogin();
-    setShowLoginFlow(false);
   };
 
   const handleReferAndEarn = async () => {
@@ -274,14 +270,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
   };
 
   const primaryActions = [
-    { id: 'apply-loan', label: 'Apply for Loan', icon: Wallet, color: 'bg-green-700', textColor: 'text-white', onClick: () => currentUser ? setShowLoanModal(true) : setShowLoginFlow(true) },
+    { id: 'apply-loan', label: 'Apply for Loan', icon: Wallet, color: 'bg-green-700', textColor: 'text-white', onClick: () => currentUser ? setShowLoanModal(true) : onShowLogin() },
     { id: 'check-status', label: 'Check Loan Status', icon: Search, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => onNavigate('my-loans') },
-    { id: 'repay-loan', label: 'Repay Loan', icon: CreditCard, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => currentUser ? setShowRepayModal(true) : setShowLoginFlow(true) },
+    { id: 'repay-loan', label: 'Repay Loan', icon: CreditCard, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => currentUser ? setShowRepayModal(true) : onShowLogin() },
     { id: 'agent', label: 'Agent Access', icon: Headphones, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: onAgentLogin },
     { id: 'mobile-money', label: 'Mobile Money', icon: Smartphone, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => onNavigate('digital-services') },
     { id: 'rewards', label: 'Loyalty Rewards', icon: Gift, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => alert('Rewards Points: 250 ML Points') },
     { id: 'digital-services', label: 'Invest with Us', icon: TrendingUp, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => onNavigate('digital-services') },
-    { id: 'live-meeting', label: 'Live Support', icon: Video, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => currentUser ? setShowLiveMeeting(true) : setShowLoginFlow(true) },
+    { id: 'live-meeting', label: 'Live Support', icon: Video, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => currentUser ? setShowLiveMeeting(true) : onShowLogin() },
     { id: 'ai-lab', label: 'Gemini AI Lab', icon: Sparkles, color: 'bg-emerald-50', textColor: 'text-emerald-700', onClick: () => onNavigate('ai-lab') },
     { id: 'account', label: 'My Account', icon: UserIcon, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => onNavigate('account') },
   ];
@@ -342,13 +338,13 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
             </div>
             <div className="flex gap-3 w-full sm:w-auto">
               <button 
-                onClick={() => setShowLoginFlow(true)}
+                onClick={onShowLogin}
                 className="flex-1 sm:flex-none bg-white text-green-700 border border-green-700 px-6 py-3 rounded-xl text-sm font-bold hover:bg-green-50 transition-colors text-center"
               >
                 Log In
               </button>
               <button 
-                onClick={() => setShowRegFlow(true)}
+                onClick={onShowRegistration}
                 className="flex-1 sm:flex-none bg-green-700 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-green-800 transition-colors text-center shadow-md"
               >
                 Register
@@ -398,34 +394,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
             </motion.div>
           </div>
         </div>
-      )}
-
-      {showRegFlow && (
-        <RegistrationFlow 
-          appConfig={{ name: config.appName, logo: config.appLogo }}
-          onComplete={(user) => {
-            onRegister(user);
-            setShowRegFlow(false);
-          }}
-          onCancel={() => setShowRegFlow(false)}
-          onSwitchToLogin={() => {
-            setShowRegFlow(false);
-            setShowLoginFlow(true);
-          }}
-        />
-      )}
-
-      {showLoginFlow && (
-        <LoginFlow 
-          appConfig={{ name: config.appName, logo: config.appLogo }}
-          onLogin={handleLogin}
-          onAdminLogin={handleAdminLogin}
-          onCancel={() => setShowLoginFlow(false)}
-          onSwitchToRegister={() => {
-            setShowLoginFlow(false);
-            setShowRegFlow(true);
-          }}
-        />
       )}
 
       {/* Loan Request Modal */}

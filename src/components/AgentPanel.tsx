@@ -58,6 +58,21 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
   const [currentAgent, setCurrentAgent] = useState<Agent | null>(null);
   const [files, setFiles] = useState<{ id: string, name: string, size: string, type: string, date: string, content?: string, folderId?: string | null }[]>([]);
   const [folders, setFolders] = useState<{ id: string, name: string, parentId: string | null }[]>([]);
+  
+  const playNotificationSound = () => {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.play().catch(e => console.warn('Audio playback failed:', e));
+  };
+
+  useEffect(() => {
+    if (tasks.length > 0) {
+      const last = tasks[0];
+      if (last.status === 'pending') {
+        playNotificationSound();
+      }
+    }
+  }, [tasks.length]);
+
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [config, setConfig] = useState<SystemConfig>({
     appName: 'MoneyLink Financial',
@@ -492,6 +507,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
                             const updatedMessages = [...existingMessages, newMessage];
                             localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(updatedMessages));
                             
+                            // Send Notification to User
+                            const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+                            userNotifications.push({
+                              id: Math.random().toString(36).substr(2, 9),
+                              userId: chatId,
+                              title: 'New Message from Support',
+                              message: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                              date: new Date().toLocaleString(),
+                              isRead: false,
+                              type: 'chat'
+                            });
+                            localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
+
                             // Force re-render (in a real app, use state or context)
                             const event = new Event('storage');
                             window.dispatchEvent(event);
@@ -526,6 +554,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
                             const updatedMessages = [...existingMessages, newMessage];
                             localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(updatedMessages));
                             
+                            // Send Notification to User
+                            const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+                            userNotifications.push({
+                              id: Math.random().toString(36).substr(2, 9),
+                              userId: chatId,
+                              title: 'New Message from Support',
+                              message: text.length > 50 ? text.substring(0, 47) + '...' : text,
+                              date: new Date().toLocaleString(),
+                              isRead: false,
+                              type: 'chat'
+                            });
+                            localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
+
                             const storageEvent = new Event('storage');
                             window.dispatchEvent(storageEvent);
                             

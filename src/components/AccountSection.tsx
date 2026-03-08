@@ -22,11 +22,12 @@ interface AccountSectionProps {
   onBack: () => void;
   onLogout: () => void;
   currentUser: User | null;
+  onUpdateUser: (user: User) => void;
   onNavigate: (section: Section) => void;
   config: any;
 }
 
-const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, currentUser, onNavigate, config }) => {
+const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, currentUser, onUpdateUser, onNavigate, config }) => {
   const [activeSubPanel, setActiveSubPanel] = useState<'main' | 'payment' | 'address' | 'security'>('main');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -52,8 +53,8 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
       if (currentUser) {
         const updatedUser = { ...currentUser, name: editForm.name, phone: editForm.phone };
         localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
-        // Force a reload to reflect changes or use a callback if available (but for now reload is safest to sync state)
-        window.location.reload();
+        // Update state via callback
+        onUpdateUser(updatedUser);
       }
       
       setIsEditing(false);
@@ -75,30 +76,6 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
     { id: 'security-settings', label: 'Security Settings', icon: ShieldCheck },
     { id: 'referral', label: 'Referral Program', icon: Users, onClick: () => alert('Referral Code: ML' + currentUser?.id?.toUpperCase()) },
     { id: 'preferences', label: 'App Preferences', icon: Settings },
-    { 
-      id: 'delete-account', 
-      label: 'Delete Account', 
-      icon: CloseIcon, 
-      onClick: async () => {
-        if (confirm('Are you sure you want to permanently delete your account? This action cannot be undone.')) {
-          try {
-            if (currentUser?.id) {
-              await fetch(`/api/users/${currentUser.id}`, { method: 'DELETE' });
-              // Also remove from local storage users list if it exists
-              const storedUsers = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
-              const updatedUsers = storedUsers.filter((u: any) => u.id !== currentUser.id);
-              localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
-              
-              alert('Your account has been deleted successfully.');
-              onLogout();
-            }
-          } catch (error) {
-            console.error('Failed to delete account:', error);
-            alert('Failed to delete account. Please try again later.');
-          }
-        }
-      } 
-    },
   ];
 
   if (activeSubPanel === 'address') {

@@ -290,19 +290,12 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
   const currentStepIndex = steps.indexOf(step);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative"
+        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative border border-[#E5E5E5]"
       >
-        <button 
-          onClick={onCancel}
-          className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full transition-colors z-10"
-        >
-          <X className="w-5 h-5 text-[#999]" />
-        </button>
-
         <div className="p-8">
           {/* Progress Bar */}
           <div className="flex gap-2 mb-8">
