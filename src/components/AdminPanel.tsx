@@ -82,7 +82,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [streamingApps, setStreamingApps] = useState<StreamingApp[]>([]);
   const [agentRequests, setAgentRequests] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'services' | 'system' | 'workplace' | 'storage' | 'chat' | 'agents' | 'meetings' | 'streaming' | 'live-meeting' | 'transactions' | 'agent-requests'>('workplace');
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'services' | 'system' | 'workplace' | 'storage' | 'chat' | 'agents' | 'meetings' | 'streaming' | 'live-meeting' | 'transactions' | 'agent-requests' | 'servers' | 'tools' | 'app-requests'>(() => {
+    return (localStorage.getItem('moneylink_admin_active_tab') as any) || 'requests';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('moneylink_admin_active_tab', activeTab);
+  }, [activeTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
@@ -131,10 +137,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
   }, [chatMessages.length]);
 
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showRecruitAgentModal, setShowRecruitAgentModal] = useState(false);
   const [showDocModal, setShowDocModal] = useState<{ type: string, url: string } | null>(null);
   const [showMapModal, setShowMapModal] = useState<{ lat: number, lng: number } | null>(null);
   const [newUser, setNewUser] = useState({ name: '', phone: '', nrc: '', password: '' });
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [recurringPayments, setRecurringPayments] = useState<any[]>([]);
   
   const handleCreateUser = () => {
@@ -453,77 +461,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
     alert('App Name Request submitted to Developer for approval!');
   };
 
-  const recruitAgent = async () => {
-    const name = prompt('Enter Agent Name:');
-    if (!name) return;
-    
-    const newAgent: Agent = {
-      id: Date.now().toString(),
-      adminId: currentAdminId || 'unknown',
-      name,
-      status: 'active',
-      taxId: `TAX_${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-      joinedAt: new Date().toISOString()
-    };
-    
-    await fetch('/api/agents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newAgent)
-    });
-    
-    // Create Admin Storage Folder for Agent
-    const storedFolders = JSON.parse(localStorage.getItem('moneylink_admin_folders') || '[]');
-    const folderId = Math.random().toString(36).substr(2, 9);
-    storedFolders.push({
-      id: folderId,
-      name: `Agent: ${newAgent.name}`,
-      parentId: null
-    });
-    localStorage.setItem('moneylink_admin_folders', JSON.stringify(storedFolders));
+  const recruitAgent = () => setShowRecruitAgentModal(true);
 
-    setAgents(prev => [newAgent, ...prev]);
-    alert('Agent recruited successfully!');
-  };
-
-  const addUser = async () => {
-    const name = prompt('Enter User Name:');
-    if (!name) return;
-    const phone = prompt('Enter Phone:');
-    if (!phone) return;
-    
-    const newUser: User = {
-      id: Date.now().toString(),
-      adminId: currentAdminId || 'unknown',
-      name,
-      phone,
-      nrc: 'PENDING',
-      isRegistered: false,
-      balance: 0,
-      isVerified: false,
-      isFrozen: false,
-      createdAt: new Date().toISOString()
-    };
-    
-    await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser)
-    });
-    
-    // Create Admin Storage Folder for User
-    const storedFolders = JSON.parse(localStorage.getItem('moneylink_admin_folders') || '[]');
-    const folderId = Math.random().toString(36).substr(2, 9);
-    storedFolders.push({
-      id: folderId,
-      name: `User: ${newUser.name} (${newUser.phone})`,
-      parentId: null
-    });
-    localStorage.setItem('moneylink_admin_folders', JSON.stringify(storedFolders));
-
-    setUsers(prev => [newUser, ...prev]);
-    alert('User added successfully!');
-  };
+  const addUser = () => setShowCreateUserModal(true);
 
   const saveConfig = () => {
     localStorage.setItem('moneylink_config', JSON.stringify(config));
@@ -1110,19 +1050,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
     }
   };
 
-  const handleRemove = async (requestId: string) => {
-    if (confirm('Are you sure you want to remove this loan request?')) {
-      try {
-        await fetch(`/api/loan-requests/${requestId}`, { method: 'DELETE' });
-        setLoanRequests(loanRequests.filter(r => r.id !== requestId));
-        localStorage.setItem('moneylink_loan_requests', JSON.stringify(loanRequests.filter(r => r.id !== requestId)));
-      } catch (error) {
-        console.error('Failed to remove loan request', error);
-        alert('Failed to remove loan request.');
-      }
-    }
-  };
-
   const handleDeleteUser = async (userId: string) => {
     if (userId === currentAdminId) {
       alert('You cannot delete your own admin profile.');
@@ -1136,6 +1063,62 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
         localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
       } catch (error) {
         console.error('Failed to delete user:', error);
+      }
+    }
+  };
+
+  const handleApproveTransaction = async (tx: Transaction) => {
+    if (confirm('Approve this transaction and update user balance?')) {
+      try {
+        // Find user
+        const user = users.find(u => u.id === tx.userId);
+        if (!user) {
+          alert('User not found.');
+          return;
+        }
+
+        // Update transaction
+        const updatedTx = { ...tx, status: 'completed' as const };
+        await fetch(`/api/transactions/${tx.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTx)
+        });
+
+        // Update user balance
+        const updatedUser = { ...user, balance: user.balance + tx.amount };
+        await fetch(`/api/users/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedUser)
+        });
+
+        // Update local state
+        setTransactions(transactions.map(t => t.id === tx.id ? updatedTx : t));
+        setUsers(users.map(u => u.id === user.id ? updatedUser : u));
+
+        alert('Transaction approved and balance updated.');
+      } catch (error) {
+        console.error('Failed to approve transaction:', error);
+        alert('Failed to approve transaction.');
+      }
+    }
+  };
+
+  const handleRejectTransaction = async (tx: Transaction) => {
+    if (confirm('Reject this transaction?')) {
+      try {
+        const updatedTx = { ...tx, status: 'failed' as const };
+        await fetch(`/api/transactions/${tx.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTx)
+        });
+
+        setTransactions(transactions.map(t => t.id === tx.id ? updatedTx : t));
+        alert('Transaction rejected.');
+      } catch (error) {
+        console.error('Failed to reject transaction:', error);
       }
     }
   };
@@ -1159,10 +1142,69 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       }
       
       setEditingUser(null);
-      alert('User profile updated successfully on backend!');
+      alert('User profile updated successfully!');
     } catch (error) {
       console.error('Failed to update user:', error);
-      alert('Failed to update user on backend.');
+      alert('Failed to update user profile.');
+    }
+  };
+
+  const handleUpdateAgent = async (agent: Agent) => {
+    try {
+      await fetch(`/api/agents/${agent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(agent)
+      });
+      
+      const updatedAgents = agents.map(a => a.id === agent.id ? agent : a);
+      setAgents(updatedAgents);
+      localStorage.setItem('moneylink_agents', JSON.stringify(updatedAgents));
+      setEditingAgent(null);
+      alert('Agent profile updated successfully.');
+    } catch (error) {
+      console.error('Failed to update agent:', error);
+      alert('Failed to update agent profile.');
+    }
+  };
+
+  const handleRecruitAgent = async (agentData: Partial<Agent>) => {
+    try {
+      const newAgent: Agent = {
+        id: Date.now().toString(),
+        adminId: currentAdminId || 'unknown',
+        name: agentData.name || 'New Agent',
+        phone: agentData.phone || '',
+        status: 'active',
+        taxId: `TAX_${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        joinedAt: new Date().toISOString(),
+        ...agentData
+      };
+
+      await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAgent)
+      });
+
+      const updatedAgents = [...agents, newAgent];
+      setAgents(updatedAgents);
+      localStorage.setItem('moneylink_agents', JSON.stringify(updatedAgents));
+      
+      // Create folder for agent
+      const storedFolders = JSON.parse(localStorage.getItem('moneylink_admin_folders') || '[]');
+      storedFolders.push({
+        id: Math.random().toString(36).substr(2, 9),
+        name: `Agent: ${newAgent.name}`,
+        parentId: null
+      });
+      localStorage.setItem('moneylink_admin_folders', JSON.stringify(storedFolders));
+      
+      setShowRecruitAgentModal(false);
+      alert('Agent recruited successfully.');
+    } catch (error) {
+      console.error('Failed to recruit agent:', error);
+      alert('Failed to recruit agent.');
     }
   };
 
@@ -1246,152 +1288,202 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-700 text-white rounded-2xl flex items-center justify-center shadow-lg">
-              <Shield className="w-6 h-6" />
+    <div className="min-h-screen bg-[#F8F9FA] flex">
+      {/* Sidebar */}
+      <div className="w-64 bg-white border-r border-[#E5E5E5] flex flex-col fixed h-full z-10">
+        <div className="p-6 border-b border-[#E5E5E5]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-700 text-white rounded-xl flex items-center justify-center shadow-sm">
+              <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">
-                {currentAdmin?.isMainAdmin ? 'DERICK MUSIYALIKE INSTITUTION (DMI)' : currentAdmin?.companyName || 'Admin Dashboard'}
+              <h1 className="text-sm font-bold leading-tight">
+                {currentAdmin?.isMainAdmin ? 'DMI Admin' : currentAdmin?.companyName || 'Admin'}
               </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${isConnectionActive ? 'bg-green-500 animate-ping' : 'bg-green-500'}`}></div>
-                <span className="text-[10px] font-bold text-green-700 uppercase tracking-widest">Digital Connection Active</span>
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${isConnectionActive ? 'bg-green-500 animate-pulse' : 'bg-green-500'}`}></div>
+                <span className="text-[8px] font-bold text-green-700 uppercase tracking-widest">Active</span>
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => setIsLoggedIn(false)}
-            className="p-3 bg-white border border-[#E5E5E5] text-[#666] rounded-2xl hover:bg-red-50 hover:text-red-600 transition-all flex items-center gap-2 font-bold text-sm"
-          >
-            <LogOut className="w-4 h-4" />
-            Exit Admin
-          </button>
         </div>
 
-        <div className="flex flex-wrap gap-4 p-1 bg-[#F0F0F0] rounded-2xl w-full max-w-4xl">
+        <div className="flex-1 overflow-y-auto py-4 space-y-1 px-3">
+          <button
+            onClick={() => setActiveTab('workplace')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'workplace' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Workplace
+          </button>
           <button
             onClick={() => {
               setActiveTab('requests');
               markNotificationsAsRead('loan');
             }}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
-              activeTab === 'requests' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 relative ${
+              activeTab === 'requests' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
             }`}
           >
             <FileText className="w-4 h-4" />
             Requests
             {loanRequests.some(r => r.status === 'pending') && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full border-2 border-white"></span>
+              <span className="absolute top-1/2 -translate-y-1/2 right-4 w-2 h-2 bg-amber-500 rounded-full"></span>
             )}
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'users' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'users' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
             }`}
           >
             <Users className="w-4 h-4" />
             Users
           </button>
           <button
+            onClick={() => setActiveTab('transactions')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'transactions' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Wallet className="w-4 h-4" />
+            Transactions
+          </button>
+          <button
             onClick={() => setActiveTab('services')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'services' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'services' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <Zap className="w-4 h-4" />
             Services
           </button>
           <button
             onClick={() => setActiveTab('chat')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'chat' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'chat' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <MessageSquare className="w-4 h-4" />
             Chat
           </button>
           <button
             onClick={() => setActiveTab('storage')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'storage' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'storage' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <Database className="w-4 h-4" />
             Storage
           </button>
           <button
-            onClick={() => setActiveTab('system')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'system' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
-            <Settings className="w-4 h-4" />
-            System
-          </button>
-          <button
-            onClick={() => setActiveTab('workplace')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'workplace' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
-            <Shield className="w-4 h-4" />
-            Workplace
-          </button>
-          <button
             onClick={() => setActiveTab('agents')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'agents' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'agents' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <UserPlus className="w-4 h-4" />
             Agents
           </button>
           <button
+            onClick={() => setActiveTab('agent-requests')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 relative ${
+              activeTab === 'agent-requests' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Agent Requests
+            {agentRequests.filter(r => r.status === 'pending').length > 0 && (
+              <span className="absolute top-1/2 -translate-y-1/2 right-4 w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('meetings')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
-              activeTab === 'meetings' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 relative ${
+              activeTab === 'meetings' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <Video className="w-4 h-4" />
             Meetings
             {meetings.some(m => m.status === 'live') && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+              <span className="absolute top-1/2 -translate-y-1/2 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
             )}
           </button>
           <button
             onClick={() => setActiveTab('streaming')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'streaming' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'streaming' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
             <Play className="w-4 h-4" />
             Streaming
           </button>
           <button
-            onClick={() => setActiveTab('agent-requests')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
-              activeTab === 'agent-requests' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
-            <Users className="w-4 h-4" />
-            Agent Requests
-            {agentRequests.filter(r => r.status === 'pending').length > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full border-2 border-white animate-pulse"></span>
-            )}
+            onClick={() => setActiveTab('servers')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'servers' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            Servers
           </button>
           <button
-            onClick={() => setActiveTab('transactions')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'transactions' ? 'bg-white shadow-sm text-green-700' : 'text-[#666]'
-            }`}>
-            <Wallet className="w-4 h-4" />
-            Transactions
+            onClick={() => setActiveTab('tools')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'tools' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            Tools
+          </button>
+          <button
+            onClick={() => setActiveTab('app-requests')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'app-requests' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            App Requests
+          </button>
+          <button
+            onClick={() => setActiveTab('system')}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === 'system' ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            System
           </button>
         </div>
 
-        <div className="bg-white rounded-[2rem] border border-[#E5E5E5] shadow-sm overflow-hidden">
-          {activeTab !== 'workplace' && (
-            <div className="p-6 border-b border-[#F0F0F0] flex items-center gap-4 relative">
-              <Search className="w-5 h-5 text-[#999]" />
-              <input 
-                type="text"
-                placeholder="Search..."
+        <div className="p-4 border-t border-[#E5E5E5] space-y-4">
+          <p className="text-[10px] text-center text-[#999] font-bold">Developed By Derick Musiyalike</p>
+          <button 
+            onClick={() => setIsLoggedIn(false)}
+            className="w-full p-3 bg-white border border-[#E5E5E5] text-[#666] rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all flex items-center justify-center gap-2 font-bold text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            Exit Admin
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 ml-64 p-8">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold capitalize">{activeTab.replace('-', ' ')}</h2>
+          </div>
+
+          <div className="bg-white rounded-[2rem] border border-[#E5E5E5] shadow-sm overflow-hidden">
+            {activeTab !== 'workplace' && (
+              <div className="p-6 border-b border-[#F0F0F0] flex items-center gap-4 relative">
+                <Search className="w-5 h-5 text-[#999]" />
+                <input 
+                  type="text"
+                  placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onFocus={() => setShowRecentSearches(true)}
@@ -1459,7 +1551,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold">Agent Management</h2>
-                  <button onClick={recruitAgent} className="px-4 py-2 bg-green-700 text-white rounded-xl text-[10px] font-bold flex items-center gap-2">
+                  <button onClick={() => setShowRecruitAgentModal(true)} className="px-4 py-2 bg-green-700 text-white rounded-xl text-[10px] font-bold flex items-center gap-2">
                     <UserPlus className="w-4 h-4" />
                     RECRUIT_AGENT
                   </button>
@@ -1469,6 +1561,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                     <div key={agent.id} className="p-6 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl flex items-center justify-between">
                       <div>
                         <p className="font-bold text-sm">{agent.name}</p>
+                        <p className="text-[10px] text-[#999]">Phone: {agent.phone}</p>
                         <p className="text-[10px] text-[#999]">Tax ID: {agent.taxId}</p>
                         <p className="text-[10px] text-green-700 font-bold mt-1">STATUS: {agent.status.toUpperCase()}</p>
                       </div>
@@ -1485,19 +1578,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                           <LogOut className="w-4 h-4 rotate-180" />
                         </button>
                         <button 
-                          onClick={async () => {
-                            const newPhone = prompt('Edit Agent Phone:', agent.phone);
-                            if (newPhone) {
-                              const updatedAgent = { ...agent, phone: newPhone };
-                              await fetch(`/api/agents/${agent.id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(updatedAgent)
-                              });
-                              setAgents(prev => prev.map(a => a.id === agent.id ? updatedAgent : a));
-                            }
-                          }}
+                          onClick={() => setEditingAgent(agent)}
                           className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg"
+                          title="Edit Agent"
                         >
                           <Settings className="w-4 h-4" />
                         </button>
@@ -1771,7 +1854,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="text-[10px] font-bold text-green-700 uppercase">COMPLETED</span>
+                              <span className={`text-[10px] font-bold uppercase ${
+                                tx.status === 'completed' ? 'text-green-700' :
+                                tx.status === 'failed' ? 'text-red-700' :
+                                'text-amber-700'
+                              }`}>
+                                {tx.status || 'COMPLETED'}
+                              </span>
+                              {tx.status === 'pending' && (
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => handleApproveTransaction(tx)}
+                                    className="px-2 py-1 bg-green-50 text-green-700 rounded text-[10px] font-bold hover:bg-green-100"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectTransaction(tx)}
+                                    className="px-2 py-1 bg-red-50 text-red-700 rounded text-[10px] font-bold hover:bg-red-100"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -1871,7 +1976,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                           <div className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-bold text-xs">
                             {user.name.charAt(0)}
                           </div>
-                          <p className="font-bold text-sm">{user.name}</p>
+                          <div>
+                            <p className="font-bold text-sm flex items-center gap-2">
+                              {user.name}
+                              {loanRequests.some(r => r.userId === user.id && r.status === 'approved') && (
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[8px] uppercase tracking-widest">
+                                  Has Loan
+                                </span>
+                              )}
+                            </p>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -1898,8 +2012,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {user.nrcFront && <button onClick={() => setShowDocModal({ type: 'NRC Front', url: user.nrcFront! })} className="p-2 bg-gray-100 rounded-xl"><ImageIcon className="w-4 h-4" /></button>}
-                          {user.selfiePhoto && <button onClick={() => setShowDocModal({ type: 'Selfie', url: user.selfiePhoto! })} className="p-2 bg-gray-100 rounded-xl"><ImageIcon className="w-4 h-4" /></button>}
+                          {user.nrcFront && <button onClick={() => setShowDocModal({ type: 'NRC Front', url: user.nrcFront! })} className="p-2 bg-gray-100 rounded-xl" title="NRC Front"><ImageIcon className="w-4 h-4" /></button>}
+                          {user.selfiePhoto && <button onClick={() => setShowDocModal({ type: 'Selfie', url: user.selfiePhoto! })} className="p-2 bg-gray-100 rounded-xl" title="Selfie"><ImageIcon className="w-4 h-4" /></button>}
+                          {user.passportPhoto && <button onClick={() => setShowDocModal({ type: 'Passport', url: user.passportPhoto! })} className="p-2 bg-gray-100 rounded-xl" title="Passport"><ImageIcon className="w-4 h-4" /></button>}
                           <button 
                             onClick={() => setEditingUser(user)}
                             className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"
@@ -2430,6 +2545,129 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                   </table>
                 </div>
               </motion.div>
+            ) : activeTab === 'servers' ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold">Cloud Servers</h2>
+                    <p className="text-[#666] text-xs mt-1">Manage and monitor your cloud infrastructure.</p>
+                  </div>
+                  <button className="px-6 py-3 bg-green-700 text-white rounded-xl text-xs font-bold flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    PROVISION_SERVER
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Mock servers for now, should fetch from API */}
+                  {[
+                    { id: 'srv-1', name: 'Main API Gateway', status: 'online', ip: '192.168.1.10', region: 'Lusaka', type: 'Compute' },
+                    { id: 'srv-2', name: 'Database Node A', status: 'online', ip: '192.168.1.11', region: 'Lusaka', type: 'Storage' },
+                    { id: 'srv-3', name: 'Backup Server', status: 'offline', ip: '192.168.1.12', region: 'Ndola', type: 'Backup' }
+                  ].map(server => (
+                    <div key={server.id} className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className={`p-3 rounded-xl ${server.status === 'online' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                          <Database className="w-5 h-5" />
+                        </div>
+                        <span className={`px-2 py-1 rounded-lg text-[8px] font-bold uppercase ${
+                          server.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {server.status}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-sm mb-1">{server.name}</h4>
+                      <p className="text-[10px] text-[#999] mb-4">{server.ip} • {server.region}</p>
+                      <div className="flex items-center justify-between pt-4 border-t border-[#F0F0F0]">
+                        <span className="text-[10px] font-bold text-[#666] uppercase">{server.type}</span>
+                        <div className="flex gap-2">
+                          <button className="p-2 hover:bg-gray-50 rounded-lg transition-all"><Settings className="w-4 h-4 text-[#999]" /></button>
+                          <button className="p-2 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4 text-red-600" /></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : activeTab === 'tools' ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold">Admin Tools</h2>
+                    <p className="text-[#666] text-xs mt-1">Utility tools for system maintenance and diagnostics.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {[
+                    { id: 'tool-1', name: 'DB Optimizer', category: 'Database', status: 'ready', icon: Database },
+                    { id: 'tool-2', name: 'Log Analyzer', category: 'System', status: 'ready', icon: FileText },
+                    { id: 'tool-3', name: 'Speed Test', category: 'Network', status: 'active', icon: Zap },
+                    { id: 'tool-4', name: 'Security Audit', category: 'Security', status: 'ready', icon: Shield }
+                  ].map(tool => (
+                    <div key={tool.id} className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm hover:border-green-500 transition-all cursor-pointer group">
+                      <div className="w-12 h-12 bg-gray-50 text-[#666] rounded-2xl flex items-center justify-center mb-4 group-hover:bg-green-50 group-hover:text-green-700 transition-all">
+                        <tool.icon className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-sm mb-1">{tool.name}</h4>
+                      <p className="text-[10px] text-[#999] uppercase font-bold tracking-widest">{tool.category}</p>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className={`px-2 py-1 rounded-lg text-[8px] font-bold uppercase ${
+                          tool.status === 'active' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {tool.status}
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-[#E5E5E5] group-hover:text-green-700 transition-all" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : activeTab === 'app-requests' ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold">Partner App Requests</h2>
+                    <p className="text-[#666] text-xs mt-1">Review and approve applications from potential partners.</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-[2.5rem] border border-[#E5E5E5] overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-[#F8F9FA] text-[#999] text-[10px] uppercase tracking-widest">
+                        <th className="px-8 py-4 font-bold">Partner Name</th>
+                        <th className="px-8 py-4 font-bold">App Name</th>
+                        <th className="px-8 py-4 font-bold">Status</th>
+                        <th className="px-8 py-4 font-bold">Date</th>
+                        <th className="px-8 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0F0F0]">
+                      {[
+                        { id: 'req-1', partner: 'John Doe', app: 'Doe Finance', status: 'pending', date: '2026-03-08' },
+                        { id: 'req-2', partner: 'Jane Smith', app: 'Smith Loans', status: 'approved', date: '2026-03-07' }
+                      ].map(req => (
+                        <tr key={req.id} className="hover:bg-[#F8F9FA] transition-colors">
+                          <td className="px-8 py-4 font-bold text-sm">{req.partner}</td>
+                          <td className="px-8 py-4 text-xs text-[#666]">{req.app}</td>
+                          <td className="px-8 py-4">
+                            <span className={`px-2 py-1 rounded-lg text-[8px] font-bold uppercase ${
+                              req.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {req.status}
+                            </span>
+                          </td>
+                          <td className="px-8 py-4 text-xs text-[#666]">{req.date}</td>
+                          <td className="px-8 py-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button className="p-2 bg-green-50 text-green-700 rounded-xl hover:bg-green-700 hover:text-white transition-all"><Check className="w-4 h-4" /></button>
+                              <button className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"><X className="w-4 h-4" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : (
               <div className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2544,7 +2782,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+                className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
               >
                 <button 
                   onClick={() => setEditingUser(null)}
@@ -2573,6 +2811,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       />
                     </div>
                     <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">NRC Number</label>
+                      <input 
+                        value={editingUser.nrc || ''}
+                        onChange={(e) => setEditingUser({ ...editingUser, nrc: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Password</label>
+                      <input 
+                        type="text"
+                        value={editingUser.password || ''}
+                        onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        placeholder="Leave blank to keep current password"
+                      />
+                    </div>
+                    <div>
                       <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Balance (K)</label>
                       <input 
                         type="number"
@@ -2580,6 +2836,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                         onChange={(e) => setEditingUser({ ...editingUser, balance: parseFloat(e.target.value) || 0 })}
                         className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
                         placeholder="Enter balance"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Workplace</label>
+                      <input 
+                        value={editingUser.workplace || ''}
+                        onChange={(e) => setEditingUser({ ...editingUser, workplace: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        placeholder="Enter workplace"
                       />
                     </div>
                     <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl">
@@ -2606,6 +2871,145 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                     className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-700/20"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {editingAgent && (
+            <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+              >
+                <button 
+                  onClick={() => setEditingAgent(null)}
+                  className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full"
+                >
+                  <XCircle className="w-5 h-5 text-[#999]" />
+                </button>
+                
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold">Edit Agent Profile</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Agent Name</label>
+                      <input 
+                        value={editingAgent.name}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, name: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Phone Number</label>
+                      <input 
+                        value={editingAgent.phone}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, phone: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Tax ID</label>
+                      <input 
+                        value={editingAgent.taxId || ''}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, taxId: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Workplace</label>
+                      <input 
+                        value={editingAgent.workplace || ''}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, workplace: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        placeholder="Enter workplace"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Status</label>
+                      <select 
+                        value={editingAgent.status}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, status: e.target.value as 'active' | 'inactive' })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleUpdateAgent(editingAgent)}
+                    className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-700/20"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showRecruitAgentModal && (
+            <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+              >
+                <button 
+                  onClick={() => setShowRecruitAgentModal(false)}
+                  className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full"
+                >
+                  <XCircle className="w-5 h-5 text-[#999]" />
+                </button>
+                
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold">Recruit New Agent</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Agent Name</label>
+                      <input 
+                        placeholder="Enter full name"
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        id="new-agent-name"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Phone Number</label>
+                      <input 
+                        placeholder="Enter phone number"
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        id="new-agent-phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Workplace</label>
+                      <input 
+                        placeholder="Enter workplace"
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        id="new-agent-workplace"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const name = (document.getElementById('new-agent-name') as HTMLInputElement).value;
+                      const phone = (document.getElementById('new-agent-phone') as HTMLInputElement).value;
+                      const workplace = (document.getElementById('new-agent-workplace') as HTMLInputElement).value;
+                      if (name && phone) {
+                        handleRecruitAgent({ name, phone, workplace });
+                      } else {
+                        alert('Please fill in all fields');
+                      }
+                    }}
+                    className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-700/20"
+                  >
+                    Recruit Agent
                   </button>
                 </div>
               </motion.div>
@@ -2650,6 +3054,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
             </div>
           )}
         </AnimatePresence>
+        </div>
         <SupportChat currentUser={null} role="admin" config={config} />
       </div>
     </div>

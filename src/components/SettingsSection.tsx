@@ -24,6 +24,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, o
     appLogo: 'https://storage.googleapis.com/static.aistudio.google.com/content/2026/02/25/08/46/27/95/96/image.png',
     biometricEnabled: false
   });
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
 
   React.useEffect(() => {
     const storedConfig = JSON.parse(localStorage.getItem('moneylink_config') || '{}');
@@ -90,7 +91,28 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, o
             <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${isDarkMode ? 'right-1' : 'left-1'}`}></div>
           </button>
         </div>
-        <h3 className="font-bold text-sm mb-4">Zoom Level</h3>
+
+        <h3 className="font-bold text-sm mb-4">AI Configuration</h3>
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Gemini API Key</label>
+          <div className="flex gap-2">
+            <input 
+              type="password"
+              value={geminiKey}
+              onChange={(e) => {
+                setGeminiKey(e.target.value);
+                localStorage.setItem('gemini_api_key', e.target.value);
+              }}
+              placeholder="Enter your Gemini API Key"
+              className="flex-1 px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-medium focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <p className="text-[10px] text-[#999] leading-relaxed">
+            This key is used for AI-powered features like the AI Lab and Support Chat. It is stored locally on your device.
+          </p>
+        </div>
+
+        <h3 className="font-bold text-sm mb-4 mt-6">Zoom Level</h3>
         <input 
           type="range" 
           min="0.5" 

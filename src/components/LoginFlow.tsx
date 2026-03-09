@@ -20,8 +20,11 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
+    setIsLoading(true);
+    setError('');
     // 1. Check Hardcoded Admin
     if (phone === '709580' && password === '709580') {
       onAdminLogin();
@@ -51,6 +54,7 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
       const adminUser = admins.find(a => a.username === phone && a.password === password);
       if (adminUser) {
         onAdminLogin();
+        setIsLoading(false);
         return;
       }
     } catch (e) {
@@ -90,9 +94,11 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
       } else {
         setError('Invalid phone number or password');
       }
+      setIsLoading(false);
     } catch (error) {
       console.error('Login failed:', error);
       setError('Connection error. Please try again.');
+      setIsLoading(false);
     }
   };
 
@@ -245,10 +251,33 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
 
                 <button 
                   onClick={handleLogin}
-                  className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-green-700/20"
+                  disabled={isLoading}
+                  className="w-full bg-green-700 disabled:bg-gray-300 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-green-700/20"
                 >
-                  Log In
-                  <ArrowRight className="w-5 h-5" />
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      Log In
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[#F0F0F0]"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-[#999] font-bold">Or</span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={onCancel}
+                  className="w-full bg-[#F8F9FA] hover:bg-[#F0F0F0] text-[#1A1A1A] py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all border border-[#E5E5E5]"
+                >
+                  Continue as Guest
                 </button>
               </>
             )}
@@ -399,6 +428,9 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
                 <Smartphone className="w-8 h-8 text-gray-600" />
               </button>
               <p className="text-xs text-gray-500 mt-2">Tap to use Biometric Lock</p>
+            </div>
+            <div className="text-center pt-8">
+              <p className="text-[10px] text-[#999] font-bold uppercase tracking-widest">Developed By Derick Musiyalike</p>
             </div>
           </div>
         </div>

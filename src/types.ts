@@ -23,6 +23,7 @@ export interface User {
     timestamp: string;
     address?: string;
   };
+  workplace?: string;
   paymentMethods?: {
     type: 'mobile_money';
     number: string;
@@ -67,6 +68,7 @@ export interface Agent {
   taxId?: string;
   joinedAt: string;
   password?: string;
+  workplace?: string;
 }
 
 export interface Meeting {

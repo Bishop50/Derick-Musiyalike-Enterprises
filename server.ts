@@ -399,10 +399,36 @@ async function startServer() {
   app.post('/api/users', (req, res) => {
     const db = readDb();
     const newUser = { ...req.body };
+    
+    // Check for unique NRC and Phone
+    const existingUser = db.users.find((u: any) => u.nrc === newUser.nrc || u.phone === newUser.phone);
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: existingUser.nrc === newUser.nrc 
+          ? 'NRC number already registered' 
+          : 'Phone number already registered' 
+      });
+    }
+
     if (!newUser.id) newUser.id = Date.now().toString();
     db.users.push(newUser);
     writeDb(db);
     res.status(201).json(newUser);
+  });
+
+  app.post('/api/login', (req, res) => {
+    const { phone, password } = req.body;
+    const db = readDb();
+    const user = db.users.find((u: any) => u.phone === phone && u.password === password);
+    
+    if (user) {
+      if (user.isFrozen) {
+        return res.status(403).json({ message: 'Account is frozen. Please contact support.' });
+      }
+      res.json({ success: true, user });
+    } else {
+      res.status(401).json({ message: 'Invalid phone number or password' });
+    }
   });
 
   app.post('/api/admin-login', (req, res) => {

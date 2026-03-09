@@ -38,7 +38,27 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
   const [selectedLoan, setSelectedLoan] = useState<any>(null);
   const [amount, setAmount] = useState('');
   const [tenure, setTenure] = useState('6 months');
+  const [loanStatusFilter, setLoanStatusFilter] = useState<string>('all');
+  const [loanSortBy, setLoanSortBy] = useState<'date' | 'amount'>('date');
+  const [loans, setLoans] = useState<LoanRequest[]>([]);
   
+  React.useEffect(() => {
+    const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+    if (currentUser) {
+      fetch(`/api/loan-requests?userId=${currentUser.id}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Network response was not ok');
+          return res.json();
+        })
+        .then(data => setLoans(data))
+        .catch(err => {
+          console.error('Failed to fetch loans from API, falling back to local storage', err);
+          const allLoans = JSON.parse(localStorage.getItem('moneylink_loan_requests') || '[]');
+          setLoans(allLoans.filter((req: LoanRequest) => req.userId === currentUser.id));
+        });
+    }
+  }, [activeTab, showConfirmation]);
+
   const interestRate = 0.10; // 10% flat rate
   const loanAmount = parseFloat(amount) || 0;
   const tenureMonths = parseInt(tenure.split(' ')[0]) || 1;
@@ -286,10 +306,49 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
           )
         ) : (
           <div className="col-span-full space-y-4">
-            {JSON.parse(localStorage.getItem('moneylink_loan_requests') || '[]')
+            {/* Filter & Sort Controls */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex items-center gap-2 bg-[#F0F0F0] p-1 rounded-xl">
+                {['all', 'pending', 'approved', 'rejected'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setLoanStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                      loanStatusFilter === status ? 'bg-white text-green-700 shadow-sm' : 'text-[#666]'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 bg-[#F0F0F0] p-1 rounded-xl">
+                <button
+                  onClick={() => setLoanSortBy('date')}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                    loanSortBy === 'date' ? 'bg-white text-green-700 shadow-sm' : 'text-[#666]'
+                  }`}
+                >
+                  Date
+                </button>
+                <button
+                  onClick={() => setLoanSortBy('amount')}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                    loanSortBy === 'amount' ? 'bg-white text-green-700 shadow-sm' : 'text-[#666]'
+                  }`}
+                >
+                  Amount
+                </button>
+              </div>
+            </div>
+
+            {loans
               .filter((req: LoanRequest) => {
-                const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
-                return req.userId === currentUser?.id;
+                const matchesStatus = loanStatusFilter === 'all' || req.status === loanStatusFilter;
+                return matchesStatus;
+              })
+              .sort((a: LoanRequest, b: LoanRequest) => {
+                if (loanSortBy === 'amount') return (b.amount || 0) - (a.amount || 0);
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
               })
               .map((req: LoanRequest) => (
                 <div key={req.id} className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm flex items-center justify-between">

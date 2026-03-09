@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { User, ChatMessage, Agent, SystemConfig, Task, LoanRequest } from '../types';
+import SupportChat from './SupportChat';
+import LiveMeeting from './LiveMeeting';
+import ZoomControl from './ZoomControl';
+
 import { 
   Users, 
   MessageSquare, 
@@ -16,12 +21,17 @@ import {
   FileText,
   Save,
   Video,
-  ArrowLeft
+  ArrowLeft,
+  Image as ImageIcon,
+  MapPin,
+  Database,
+  Calendar,
+  LayoutDashboard,
+  TrendingUp,
+  Activity,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
-import { User, ChatMessage, Agent, SystemConfig, Task } from '../types';
-import SupportChat from './SupportChat';
-import LiveMeeting from './LiveMeeting';
-import ZoomControl from './ZoomControl';
 
 interface AgentPanelProps {
   onLogout: () => void;
@@ -33,7 +43,14 @@ interface AgentPanelProps {
 const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper, onBack }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'chat' | 'tasks' | 'meeting' | 'storage'>('users');
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
+  const [activeTab, setActiveTab] = useState<'users' | 'chat' | 'tasks' | 'meeting' | 'storage' | 'loan-requests' | 'dashboard'>(() => {
+    return (localStorage.getItem('moneylink_agent_active_tab') as any) || 'dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('moneylink_agent_active_tab', activeTab);
+  }, [activeTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
@@ -74,6 +91,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
   }, [tasks.length]);
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [showDocModal, setShowDocModal] = useState<{ type: string, url: string } | null>(null);
+  const [showMapModal, setShowMapModal] = useState<{ lat: number, lng: number } | null>(null);
   const [config, setConfig] = useState<SystemConfig>({
     appName: 'MoneyLink Financial',
     appLogo: '',
@@ -87,10 +106,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [usersRes, agentsRes, configRes] = await Promise.all([
+        const [usersRes, agentsRes, configRes, loansRes, tasksRes] = await Promise.all([
           fetch(`/api/users`),
           fetch('/api/agents'),
-          fetch('/api/system-config')
+          fetch('/api/system-config'),
+          fetch('/api/loan-requests'),
+          fetch('/api/tasks')
         ]);
         
         if (usersRes.ok) {
@@ -99,6 +120,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
         } else {
           const storedUsers = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
           setUsers(storedUsers);
+        }
+
+        if (loansRes.ok) {
+          setLoanRequests(await loansRes.json());
+        }
+
+        if (tasksRes.ok) {
+          setTasks(await tasksRes.json());
         }
 
         if (agentsRes.ok) {
@@ -197,6 +226,42 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
     a.click();
   };
 
+  const handleApproveLoan = async (id: string) => {
+    const loan = loanRequests.find(l => l.id === id);
+    if (!loan) return;
+    
+    const updated = { ...loan, status: 'approved' as const };
+    try {
+      await fetch(`/api/loan-requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+      setLoanRequests(prev => prev.map(l => l.id === id ? updated : l));
+      alert('Loan approved successfully!');
+    } catch (error) {
+      alert('Failed to approve loan');
+    }
+  };
+
+  const handleRejectLoan = async (id: string) => {
+    const loan = loanRequests.find(l => l.id === id);
+    if (!loan) return;
+    
+    const updated = { ...loan, status: 'rejected' as const };
+    try {
+      await fetch(`/api/loan-requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+      setLoanRequests(prev => prev.map(l => l.id === id ? updated : l));
+      alert('Loan rejected.');
+    } catch (error) {
+      alert('Failed to reject loan');
+    }
+  };
+
   const handleUpdateUser = async (updatedUser: User) => {
     try {
       await fetch(`/api/users/${updatedUser.id}`, {
@@ -277,10 +342,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
         </div>
 
         {/* Navigation */}
-        <div className="flex gap-4 p-1 bg-[#F0F0F0] rounded-2xl w-full max-w-md">
+        <div className="flex gap-4 p-1 bg-[#F0F0F0] rounded-2xl w-full max-w-2xl overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === 'dashboard' ? 'bg-white shadow-sm text-purple-600' : 'text-[#666]'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            DASHBOARD
+          </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
               activeTab === 'users' ? 'bg-white shadow-sm text-purple-600' : 'text-[#666]'
             }`}
           >
@@ -295,6 +369,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
           >
             <MessageSquare className="w-4 h-4" />
             CHAT
+          </button>
+          <button
+            onClick={() => setActiveTab('loan-requests')}
+            className={`px-6 py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'loan-requests' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#666] hover:text-purple-600'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            LOAN_REQUESTS
           </button>
           <button
             onClick={() => setActiveTab('tasks')}
@@ -327,6 +410,151 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
 
         {/* Main Content */}
         <div className="bg-white rounded-[2.5rem] border border-[#E5E5E5] shadow-xl overflow-hidden min-h-[600px]">
+          {activeTab === 'dashboard' && (
+            <div className="p-8 space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Agent Dashboard</h2>
+                  <p className="text-[#666] text-sm">Welcome back, {currentAgent?.name || 'Agent'}</p>
+                </div>
+                <div className="flex items-center gap-2 bg-purple-50 px-4 py-2 rounded-xl border border-purple-100">
+                  <Activity className="w-4 h-4 text-purple-600" />
+                  <span className="text-xs font-bold text-purple-700 uppercase tracking-widest">Live Status</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="p-6 bg-[#F8F9FA] border border-[#E5E5E5] rounded-3xl space-y-2">
+                  <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest">Total Users</p>
+                  <p className="text-2xl font-black">{users.length}</p>
+                </div>
+                <div className="p-6 bg-[#F8F9FA] border border-[#E5E5E5] rounded-3xl space-y-2">
+                  <div className="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest">Active Loans</p>
+                  <p className="text-2xl font-black">{loanRequests.filter(r => r.status === 'approved').length}</p>
+                </div>
+                <div className="p-6 bg-[#F8F9FA] border border-[#E5E5E5] rounded-3xl space-y-2">
+                  <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest">Pending Tasks</p>
+                  <p className="text-2xl font-black">{tasks.filter(t => t.status === 'pending').length}</p>
+                </div>
+                <div className="p-6 bg-[#F8F9FA] border border-[#E5E5E5] rounded-3xl space-y-2">
+                  <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest">New Messages</p>
+                  <p className="text-2xl font-black">0</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-blue-600" />
+                  Quick Actions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <button 
+                    onClick={() => setActiveTab('users')}
+                    className="p-6 bg-blue-50 border border-blue-100 rounded-3xl text-left hover:bg-blue-100 transition-all group"
+                  >
+                    <UserPlus className="w-6 h-6 text-blue-600 mb-2" />
+                    <p className="font-bold text-sm">Register New User</p>
+                    <p className="text-[10px] text-blue-700">Add a new client to the system</p>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('loan-requests')}
+                    className="p-6 bg-green-50 border border-green-100 rounded-3xl text-left hover:bg-green-100 transition-all group"
+                  >
+                    <FileText className="w-6 h-6 text-green-600 mb-2" />
+                    <p className="font-bold text-sm">Review Loans</p>
+                    <p className="text-[10px] text-green-700">Check pending loan applications</p>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('chat')}
+                    className="p-6 bg-purple-50 border border-purple-100 rounded-3xl text-left hover:bg-purple-100 transition-all group"
+                  >
+                    <MessageSquare className="w-6 h-6 text-purple-600 mb-2" />
+                    <p className="font-bold text-sm">Support Chat</p>
+                    <p className="text-[10px] text-purple-700">Respond to user inquiries</p>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-purple-600" />
+                    Recent Activity
+                  </h3>
+                  <div className="space-y-3">
+                    {loanRequests.slice(0, 5).map(req => (
+                      <div key={req.id} className="p-4 bg-white border border-[#F0F0F0] rounded-2xl flex items-center justify-between hover:border-purple-200 transition-all cursor-pointer group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center font-bold text-xs">
+                            {req.userName.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{req.userName}</p>
+                            <p className="text-[10px] text-[#999]">Loan Request: K {req.amount}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
+                            req.status === 'approved' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {req.status}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-[#999] group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Priority Tasks
+                  </h3>
+                  <div className="space-y-3">
+                    {tasks.filter(t => t.status === 'pending').slice(0, 5).map(task => (
+                      <div key={task.id} className="p-4 bg-white border border-[#F0F0F0] rounded-2xl flex items-center justify-between hover:border-green-200 transition-all cursor-pointer group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-50 text-green-600 rounded-lg flex items-center justify-center">
+                            <Wrench className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{task.title}</p>
+                            <p className="text-[10px] text-[#999]">{task.description.substring(0, 40)}...</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setActiveTab('tasks')}
+                          className="p-2 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {tasks.filter(t => t.status === 'pending').length === 0 && (
+                      <div className="p-8 text-center bg-[#F8F9FA] rounded-3xl border border-dashed border-[#E5E5E5]">
+                        <CheckCircle className="w-8 h-8 text-green-200 mx-auto mb-2" />
+                        <p className="text-xs text-[#999] font-bold">All caught up!</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'users' && (
             <div className="p-8 space-y-6">
               <div className="flex items-center justify-between">
@@ -399,6 +627,33 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
                     </div>
 
                     <div className="flex gap-2">
+                      {user.nrcFront && (
+                        <button 
+                          onClick={() => setShowDocModal({ type: 'NRC Front', url: user.nrcFront! })}
+                          className="p-2 bg-gray-100 rounded-xl hover:bg-purple-100 transition-all"
+                          title="NRC Front"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                      )}
+                      {user.selfiePhoto && (
+                        <button 
+                          onClick={() => setShowDocModal({ type: 'Selfie', url: user.selfiePhoto! })}
+                          className="p-2 bg-gray-100 rounded-xl hover:bg-purple-100 transition-all"
+                          title="Selfie"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                      )}
+                      {user.passportPhoto && (
+                        <button 
+                          onClick={() => setShowDocModal({ type: 'Passport', url: user.passportPhoto! })}
+                          className="p-2 bg-gray-100 rounded-xl hover:bg-purple-100 transition-all"
+                          title="Passport"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                      )}
                       <button 
                         onClick={() => setEditingUser(user)}
                         className="flex-1 py-2 bg-white border border-[#E5E5E5] rounded-xl text-[10px] font-bold hover:bg-purple-50 hover:text-purple-600 transition-all flex items-center justify-center gap-2"
@@ -594,6 +849,75 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
             </div>
           )}
 
+          {activeTab === 'loan-requests' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-black tracking-tighter">LOAN REQUESTS</h2>
+                <div className="flex items-center gap-2 bg-[#F0F0F0] p-1 rounded-xl">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-[#666] uppercase">
+                    Total: {loanRequests.length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-[#F8F9FA] text-[#999] text-[10px] uppercase font-bold tracking-widest">
+                      <th className="px-6 py-4">User</th>
+                      <th className="px-6 py-4">Type</th>
+                      <th className="px-6 py-4">Amount</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F0F0]">
+                    {loanRequests.map((req) => (
+                      <tr key={`agent-loan-${req.id}`} className="hover:bg-[#F9F9F9] transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="font-bold text-sm">{req.userName}</p>
+                          <p className="text-[10px] text-[#999]">ID: {req.userId}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-medium text-[#666]">{req.type}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-bold text-sm text-purple-700">K {(req.amount || 0).toLocaleString()}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter ${
+                            req.status === 'approved' ? 'bg-green-50 text-green-700' : 
+                            req.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {req.status === 'pending' && (
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleApproveLoan(req.id)}
+                                className="p-2 bg-green-50 text-green-700 rounded-xl hover:bg-green-700 hover:text-white transition-all"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleRejectLoan(req.id)}
+                                className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'tasks' && (
             <div className="p-8">
               <div className="flex items-center justify-between mb-6">
@@ -728,7 +1052,48 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
 
         {/* Edit User Modal */}
         <AnimatePresence>
-          {editingUser && (
+          {/* Modals */}
+      {showDocModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-[#F0F0F0] flex items-center justify-between bg-[#F8F9FA]">
+              <h3 className="text-xl font-black tracking-tighter uppercase">{showDocModal.type}</h3>
+              <button onClick={() => setShowDocModal(null)} className="p-2 hover:bg-white rounded-full transition-all">
+                <XCircle className="w-6 h-6 text-[#999]" />
+              </button>
+            </div>
+            <div className="p-8 flex items-center justify-center bg-[#F0F0F0]">
+              <img src={showDocModal.url} alt={showDocModal.type} className="max-w-full max-h-[60vh] rounded-2xl shadow-lg border-4 border-white" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMapModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-[#F0F0F0] flex items-center justify-between bg-[#F8F9FA]">
+              <h3 className="text-xl font-black tracking-tighter uppercase">User Location</h3>
+              <button onClick={() => setShowMapModal(null)} className="p-2 hover:bg-white rounded-full transition-all">
+                <XCircle className="w-6 h-6 text-[#999]" />
+              </button>
+            </div>
+            <div className="h-[60vh] bg-[#F0F0F0] relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <MapPin className="w-12 h-12 text-purple-600 mx-auto animate-bounce" />
+                  <p className="font-bold text-[#666]">Latitude: {showMapModal.lat}<br/>Longitude: {showMapModal.lng}</p>
+                  <div className="p-4 bg-white rounded-2xl shadow-sm border border-[#E5E5E5]">
+                    <p className="text-xs text-[#999]">Map visualization would load here in production.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <motion.div 
                 initial={{ opacity: 0 }}
@@ -767,6 +1132,25 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
                       value={editingUser.phone}
                       onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
                       className="w-full px-6 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-sm font-bold outline-none focus:border-purple-600"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-[#999] uppercase ml-4">NRC Number</label>
+                    <input 
+                      type="text"
+                      value={editingUser.nrc || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, nrc: e.target.value })}
+                      className="w-full px-6 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-sm font-bold outline-none focus:border-purple-600"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-[#999] uppercase ml-4">Password</label>
+                    <input 
+                      type="text"
+                      value={editingUser.password || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                      className="w-full px-6 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-sm font-bold outline-none focus:border-purple-600"
+                      placeholder="Leave blank to keep current password"
                     />
                   </div>
                   <div className="flex items-center justify-between p-4 bg-purple-50 rounded-2xl">

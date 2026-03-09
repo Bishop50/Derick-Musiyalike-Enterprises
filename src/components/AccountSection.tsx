@@ -36,9 +36,28 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
     phone: currentUser?.phone || ''
   });
 
-  const handleSaveProfile = () => {
-    // Simulate API call
-    setTimeout(() => {
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const updatedUser = { ...currentUser, name: editForm.name, phone: editForm.phone };
+      const res = await fetch(`/api/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedUser)
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('moneylink_current_user', JSON.stringify(data));
+        onUpdateUser(data);
+        setIsEditing(false);
+        alert('Profile updated successfully!');
+      } else {
+        throw new Error('Failed to update profile');
+      }
+    } catch (e) {
+      console.error('API update failed, falling back to local storage', e);
       // Update local storage
       const storedUsers = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
       const updatedUsers = storedUsers.map((u: any) => {
@@ -50,16 +69,14 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
       localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
       
       // Update current user session
-      if (currentUser) {
-        const updatedUser = { ...currentUser, name: editForm.name, phone: editForm.phone };
-        localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
-        // Update state via callback
-        onUpdateUser(updatedUser);
-      }
+      const updatedUser = { ...currentUser, name: editForm.name, phone: editForm.phone };
+      localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+      // Update state via callback
+      onUpdateUser(updatedUser);
       
       setIsEditing(false);
       alert('Profile updated successfully!');
-    }, 1000);
+    }
   };
 
   const menuItems = [

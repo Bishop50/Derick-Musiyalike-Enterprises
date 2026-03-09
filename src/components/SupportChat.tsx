@@ -29,9 +29,9 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
           if (data.length === 0 && role === 'user') {
             const welcomeMsg: ChatMessage = {
               id: 'welcome',
-              senderId: 'ai',
+              senderId: 'admin',
               receiverId: chatId,
-              text: `Hello! I'm your ${config.appName} AI assistant. How can I help you today?`,
+              text: `Hello! How can we help you today?`,
               timestamp: new Date().toISOString(),
               isAdmin: true
             };
@@ -53,9 +53,9 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
       if (storedMessages.length === 0 && role === 'user') {
         const welcomeMsg: ChatMessage = {
           id: 'welcome',
-          senderId: 'ai',
+          senderId: 'admin',
           receiverId: chatId,
-          text: `Hello! I'm your ${config.appName} AI assistant. How can I help you today?`,
+          text: `Hello! How can we help you today?`,
           timestamp: new Date().toISOString(),
           isAdmin: true
         };
@@ -92,11 +92,12 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
     if (!textToSend) return;
 
     const senderId = role === 'user' ? (currentUser?.id || 'guest') : role;
+    const receiverId = role === 'user' ? 'admin' : 'ai';
 
     const msg: ChatMessage = {
       id: Math.random().toString(36).substr(2, 9),
       senderId: senderId,
-      receiverId: 'ai',
+      receiverId: receiverId,
       text: textToSend,
       timestamp: new Date().toISOString(),
       isAdmin: role !== 'user'
@@ -107,47 +108,53 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
     setMessages(updatedMessages);
     localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(updatedMessages));
     setNewMessage('');
-    setIsTyping(true);
     
     // Save user message in background
-    fetch('/api/chat-messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...msg, chatId })
-    }).catch(error => console.error('Failed to save message via API', error));
-
-    // Generate AI Response with minimum delay
-    const context = `User Role: ${role}. User Name: ${currentUser?.name || 'Guest'}. Platform: ${config.appName} (Derick Musiyalike Institution). ${role === 'admin' || role === 'agent' ? 'You are helping the staff member write a professional response or perform a task.' : 'You are helping a customer.'}`;
-    
     try {
-      const [aiText] = await Promise.all([
-        generateAIResponse(textToSend, context),
-        new Promise(resolve => setTimeout(resolve, 1500)) // Minimum 1.5s delay for "thinking" simulation
-      ]);
-
-      const aiMsg: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
-        senderId: 'ai',
-        receiverId: senderId,
-        text: aiText,
-        timestamp: new Date().toISOString(),
-        isAdmin: true
-      };
-
-      const finalMessages = [...updatedMessages, aiMsg];
-      setMessages(finalMessages);
-      localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(finalMessages));
-      
-      // Save AI message in background
-      fetch('/api/chat-messages', {
+      await fetch('/api/chat-messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...aiMsg, chatId })
-      }).catch(error => console.error('Failed to save AI message via API', error));
+        body: JSON.stringify({ ...msg, chatId })
+      });
     } catch (error) {
-      console.error('AI generation failed', error);
-    } finally {
-      setIsTyping(false);
+      console.error('Failed to save message via API', error);
+    }
+
+    if (role !== 'user') {
+      setIsTyping(true);
+      // Generate AI Response with minimum delay for admins/agents
+      const context = `User Role: ${role}. User Name: ${currentUser?.name || 'Guest'}. Platform: ${config.appName} (Derick Musiyalike Institution). You are helping the staff member write a professional response or perform a task.`;
+      
+      try {
+        const [aiText] = await Promise.all([
+          generateAIResponse(textToSend, context),
+          new Promise(resolve => setTimeout(resolve, 1500)) // Minimum 1.5s delay for "thinking" simulation
+        ]);
+
+        const aiMsg: ChatMessage = {
+          id: Math.random().toString(36).substr(2, 9),
+          senderId: 'ai',
+          receiverId: senderId,
+          text: aiText,
+          timestamp: new Date().toISOString(),
+          isAdmin: true
+        };
+
+        const finalMessages = [...updatedMessages, aiMsg];
+        setMessages(finalMessages);
+        localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(finalMessages));
+        
+        // Save AI message in background
+        fetch('/api/chat-messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...aiMsg, chatId })
+        }).catch(error => console.error('Failed to save AI message via API', error));
+      } catch (error) {
+        console.error('AI generation failed', error);
+      } finally {
+        setIsTyping(false);
+      }
     }
   };
 
@@ -193,11 +200,11 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
             <div className={`${getHeaderColor()} p-4 text-white flex items-center justify-between`}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                  <Cpu className="w-4 h-4" />
+                  {role === 'user' ? <MessageSquare className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
                 </div>
                 <div>
-                  <p className="text-xs font-bold">AI Real Assist</p>
-                  <p className="text-[8px] opacity-60 uppercase tracking-widest">Powered by Gemini</p>
+                  <p className="text-xs font-bold">{role === 'user' ? 'Support Chat' : 'AI Real Assist'}</p>
+                  <p className="text-[8px] opacity-60 uppercase tracking-widest">{role === 'user' ? 'Chat with Admin' : 'Powered by Gemini'}</p>
                 </div>
               </div>
               <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-white/10 rounded-lg">

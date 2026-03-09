@@ -44,6 +44,8 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
   const [showTermsModal, setShowTermsModal] = useState(false);
 
   const [passwordFeedback, setPasswordFeedback] = useState<string[]>([]);
+  const [registeredUser, setRegisteredUser] = useState<UserType | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const validatePassword = (pass: string) => {
     let strength = 0;
@@ -86,22 +88,26 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
 
   const handlePhoneSubmit = async () => {
     if (phoneNumber.length >= 9) {
+      setIsLoading(true);
       try {
         const res = await fetch('/api/users');
         if (!res.ok) {
           alert('Server connection error. Please try again later.');
+          setIsLoading(false);
           return;
         }
         const users: UserType[] = await res.json();
-        const existingUser = users.find(u => u.phone === phoneNumber || u.nrc === nrcNumber);
+        const existingUser = users.find(u => u.phone === phoneNumber);
         if (existingUser) {
-          alert('Your information is already registered in our system, please log in.');
+          alert('Your phone number is already registered in our system, please log in.');
           onCancel(); // Close registration and let them login
+          setIsLoading(false);
           return;
         }
       } catch (e) {
         console.error('Error checking existing user:', e);
         alert('Server connection error. Please try again later.');
+        setIsLoading(false);
         return;
       }
 
@@ -112,6 +118,7 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
       const newOtp = (array[0] % 900000 + 100000).toString();
       setGeneratedOtp(newOtp);
       console.log('OTP Sent to +260' + phoneNumber + ': ' + newOtp);
+      setIsLoading(false);
     }
   };
 
@@ -190,6 +197,29 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
   };
 
   const handleComplete = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/users');
+      if (!res.ok) {
+        alert('Server connection error. Please try again later.');
+        setIsLoading(false);
+        return;
+      }
+      const users: UserType[] = await res.json();
+      const existingUser = users.find(u => u.nrc === nrcNumber);
+      if (existingUser) {
+        alert('This NRC is already registered in our system. Please log in.');
+        onCancel();
+        setIsLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.error('Error checking existing user:', e);
+      alert('Server connection error. Please try again later.');
+      setIsLoading(false);
+      return;
+    }
+
     const newUser: UserType = {
       id: Math.random().toString(36).substr(2, 9),
       adminId: 'default_admin', // Default to main admin
@@ -207,14 +237,6 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
     };
 
     try {
-      // Always save to Local Storage first for redundancy
-      const existingUsers = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
-      // Check if user already exists in local storage to prevent duplicates
-      const isDuplicate = existingUsers.some((u: UserType) => u.phone === newUser.phone);
-      if (!isDuplicate) {
-        localStorage.setItem('moneylink_users', JSON.stringify([...existingUsers, newUser]));
-      }
-
       // Save to backend
       const response = await fetch('/api/users', {
         method: 'POST',
@@ -233,7 +255,7 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
         body: JSON.stringify({
           userId: newUser.id,
           title: `Welcome to ${appConfig.name}`,
-          message: 'Your account has been created. Please wait for document verification.',
+          message: 'Your account has been successfully created and verified.',
           isRead: false,
           type: 'system'
         })
@@ -245,44 +267,28 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: 'New User Registration',
-          message: `${newUser.name} (+260 ${newUser.phone}) has registered and is awaiting verification.`,
+          message: `${newUser.name} (+260 ${newUser.phone}) has registered and is verified.`,
           userId: newUser.id,
           type: 'registration',
           isRead: false
         })
       });
 
-      onComplete(newUser);
+      setRegisteredUser(newUser);
+      setIsLoading(false);
+      return newUser;
     } catch (error) {
-      console.error('Failed to register user on backend, falling back to local storage:', error);
-      
-      // Save Notification locally if API failed
-      const notifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
-      notifications.push({
-        id: Math.random().toString(36).substr(2, 9),
-        userId: newUser.id,
-        title: `Welcome to ${appConfig.name}`,
-        message: 'Your account has been created. Please wait for document verification.',
-        date: new Date().toLocaleString(),
-        isRead: false,
-        type: 'system'
-      });
-      localStorage.setItem('moneylink_notifications', JSON.stringify(notifications));
+      console.error('Failed to register user on backend:', error);
+      alert('Failed to register user. Please check your connection and try again.');
+      setIsLoading(false);
+      return null;
+    }
+  };
 
-      // Save Admin Notification locally
-      const adminNotifications = JSON.parse(localStorage.getItem('moneylink_admin_notifications') || '[]');
-      adminNotifications.push({
-        id: Math.random().toString(36).substr(2, 9),
-        title: 'New User Registration',
-        message: `${newUser.name} (+260 ${newUser.phone}) has registered and is awaiting verification.`,
-        time: new Date().toLocaleString(),
-        isRead: false,
-        userId: newUser.id,
-        type: 'registration'
-      });
-      localStorage.setItem('moneylink_admin_notifications', JSON.stringify(adminNotifications));
-
-      onComplete(newUser);
+  const handleCompleteRegistration = async () => {
+    const user = await handleComplete();
+    if (user) {
+      onComplete(user);
     }
   };
 
@@ -290,12 +296,19 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
   const currentStepIndex = steps.indexOf(step);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative border border-[#E5E5E5]"
+        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative"
       >
+        <button 
+          onClick={onCancel}
+          className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full transition-colors z-10"
+        >
+          <X className="w-5 h-5 text-[#999]" />
+        </button>
+
         <div className="p-8">
           {/* Progress Bar */}
           <div className="flex gap-2 mb-8">
@@ -382,11 +395,33 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                 </div>
                 <button 
                   onClick={handlePhoneSubmit}
-                  disabled={phoneNumber.length < 9 || !userName || !nrcNumber || !acceptedTerms}
+                  disabled={phoneNumber.length < 9 || !userName || !nrcNumber || !acceptedTerms || isLoading}
                   className="w-full bg-green-700 disabled:bg-gray-300 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-green-700/20"
                 >
-                  Send OTP
-                  <ArrowRight className="w-5 h-5" />
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      Send OTP
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[#F0F0F0]"></div>
+                  </div>
+                  <div className="relative flex justify-center text-[10px] uppercase font-bold">
+                    <span className="bg-white px-2 text-[#999]">Or</span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={onCancel}
+                  className="w-full bg-[#F8F9FA] hover:bg-[#F0F0F0] text-[#1A1A1A] py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all border border-[#E5E5E5]"
+                >
+                  Continue as Guest
                 </button>
               </motion.div>
             )}
@@ -699,12 +734,18 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                   </label>
 
                   <button 
-                    onClick={() => setStep('success')}
-                    disabled={!selfiePhoto}
+                    onClick={handleCompleteRegistration}
+                    disabled={!selfiePhoto || isLoading}
                     className="w-full bg-green-700 disabled:bg-gray-300 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-green-700/20"
                   >
-                    Complete Registration
-                    <ArrowRight className="w-5 h-5" />
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        Complete Registration
+                        <ArrowRight className="w-5 h-5" />
+                      </>
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -722,15 +763,15 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                   <CheckCircle2 className="w-10 h-10" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold">Verification Pending</h2>
+                  <h2 className="text-2xl font-bold">Account Verified</h2>
                   <p className="text-[#666] text-sm mt-2 leading-relaxed">
-                    Your account has been created and documents submitted. Our team will verify your identity shortly.
+                    Your account has been successfully created and verified. You can now access all features.
                   </p>
                 </div>
                 <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3 text-left">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                   <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                    <span className="font-bold">Activation Requirement:</span> KYC must be submitted to the SIM registering to activate your account features.
+                    <span className="font-bold">Account Active:</span> Your KYC has been approved. You can now apply for loans and use digital services.
                   </p>
                 </div>
                 <div className="bg-blue-50 p-4 rounded-2xl flex items-start gap-3 text-left">
@@ -741,7 +782,7 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                 </div>
                 <div className="flex flex-col gap-3">
                   <button 
-                    onClick={handleComplete}
+                    onClick={() => registeredUser && onComplete(registeredUser)}
                     className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all"
                   >
                     Go to Dashboard
@@ -759,6 +800,10 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
               </motion.div>
             )}
           </AnimatePresence>
+
+          <div className="text-center pt-8 pb-4">
+            <p className="text-[10px] text-[#999] font-bold uppercase tracking-widest">Developed By Derick Musiyalike</p>
+          </div>
         </div>
       </motion.div>
 

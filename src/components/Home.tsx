@@ -169,25 +169,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
       return;
     }
 
-    const updatedUser = { ...currentUser, balance: currentUser.balance - amount };
-    onLogin(updatedUser); // Update global state
-    localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
-
     try {
-      // Update in users list via API
-      await fetch(`/api/users/${currentUser.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedUser)
-      });
-
       // Add Transaction via API
       const newTransaction = {
         userId: currentUser.id,
         type: 'payment',
         title: 'Loan Repayment',
         amount: -amount,
-        status: 'completed'
+        status: 'pending'
       };
       
       await fetch('/api/transactions', {
@@ -202,8 +191,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: 'Loan Repayment Received',
-            message: `${currentUser.name} repaid K ${amount.toLocaleString()} towards their loan.`,
+            title: 'Loan Repayment Pending',
+            message: `${currentUser.name} requested to repay K ${amount.toLocaleString()} towards their loan. Pending approval.`,
             userId: currentUser.id,
             type: 'loan',
             isRead: false
@@ -212,13 +201,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
       }
     } catch (error) {
       console.error('Failed to process repayment via API, falling back to local storage', error);
-      // Fallback to local storage
-      const users: User[] = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
-      const userIndex = users.findIndex(u => u.id === currentUser.id);
-      if (userIndex !== -1) {
-        users[userIndex] = updatedUser;
-        localStorage.setItem('moneylink_users', JSON.stringify(users));
-      }
 
       const newTransaction: Transaction = {
         id: Math.random().toString(36).substr(2, 9),
@@ -227,7 +209,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
         title: 'Loan Repayment',
         amount: -amount,
         date: new Date().toLocaleString(),
-        status: 'completed'
+        status: 'pending'
       };
       const transactions = JSON.parse(localStorage.getItem('moneylink_transactions') || '[]');
       localStorage.setItem('moneylink_transactions', JSON.stringify([newTransaction, ...transactions]));
@@ -236,8 +218,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
         const adminNotifications = JSON.parse(localStorage.getItem('moneylink_admin_notifications') || '[]');
         adminNotifications.push({
           id: Math.random().toString(36).substr(2, 9),
-          title: 'Loan Repayment Received',
-          message: `${currentUser.name} repaid K ${amount.toLocaleString()} towards their loan.`,
+          title: 'Loan Repayment Pending',
+          message: `${currentUser.name} requested to repay K ${amount.toLocaleString()} towards their loan. Pending approval.`,
           time: new Date().toLocaleString(),
           isRead: false,
           userId: currentUser.id,
@@ -266,7 +248,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
 
     setShowRepayModal(false);
     setRepayAmount('');
-    alert('Loan repayment successful!');
+    alert('Loan repayment request submitted! Pending admin approval.');
   };
 
   const primaryActions = [
@@ -336,7 +318,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
                 <p className="text-sm text-green-700 mt-0.5">Register now to unlock financial freedom and instant loans.</p>
               </div>
             </div>
-            <div className="flex gap-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
               <button 
                 onClick={onShowLogin}
                 className="flex-1 sm:flex-none bg-white text-green-700 border border-green-700 px-6 py-3 rounded-xl text-sm font-bold hover:bg-green-50 transition-colors text-center"
@@ -348,6 +330,12 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
                 className="flex-1 sm:flex-none bg-green-700 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-green-800 transition-colors text-center shadow-md"
               >
                 Register
+              </button>
+              <button 
+                onClick={() => alert('Welcome! You are now browsing as a guest. Please register to access financial services.')}
+                className="flex-1 sm:flex-none bg-gray-100 text-[#666] px-6 py-3 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors text-center"
+              >
+                Browse as Guest
               </button>
             </div>
           </motion.div>
@@ -604,17 +592,19 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
       {/* Primary Actions Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {primaryActions.map((action) => (
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             key={action.id}
             onClick={action.onClick || (() => onNavigate(action.id as Section))}
-            className={`${action.color} ${action.textColor} p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm hover:shadow-md hover:scale-[1.02] transition-all flex flex-col items-start text-left group`}
+            className={`${action.color} ${action.textColor} p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm hover:shadow-md transition-all flex flex-col items-start text-left group`}
           >
             <div className={`p-3 rounded-2xl mb-4 ${action.id === 'apply-loan' ? 'bg-white/20' : 'bg-green-50 text-green-700'}`}>
               <action.icon className="w-6 h-6" />
             </div>
             <span className="font-bold text-sm leading-tight">{action.label}</span>
             <ChevronRight className={`w-4 h-4 mt-2 opacity-0 group-hover:opacity-100 transition-all ${action.id === 'apply-loan' ? 'text-white' : 'text-green-700'}`} />
-          </button>
+          </motion.button>
         ))}
       </div>
 

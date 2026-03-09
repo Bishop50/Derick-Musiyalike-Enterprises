@@ -43,7 +43,7 @@ import AIServicesSection from './components/AIServicesSection';
 import TaxSection from './components/TaxSection';
 import LockScreen from './components/LockScreen';
 import VerticalScale from './components/VerticalScale';
-import Onboarding from './components/Onboarding';
+import VerticalScrollHandle from './components/VerticalScrollHandle';
 import { Section, User, SystemConfig, AppNotification, Agent } from './types';
 
 const App: React.FC = () => {
@@ -72,20 +72,6 @@ const App: React.FC = () => {
     return sessionStorage.getItem('moneylink_is_locked') === 'true';
   });
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem('moneylink_has_seen_onboarding');
-    if (!hasSeenOnboarding && currentUser) {
-      setShowOnboarding(true);
-    }
-  }, [currentUser]);
-
-  const onboardingSteps = [
-    { targetId: 'nav-home', title: 'Home', description: 'View your dashboard and account overview.' },
-    { targetId: 'nav-apply-loan', title: 'Loans', description: 'Apply for loans and view your active loans.' },
-    { targetId: 'nav-digital-services', title: 'Services', description: 'Access digital financial services.' },
-  ];
 
   useEffect(() => {
     const saved = localStorage.getItem('moneylink_recent_searches');
@@ -208,7 +194,6 @@ const App: React.FC = () => {
     const directLogin = localStorage.getItem('moneylink_admin_direct_login');
     if (directLogin === 'true') {
       setIsAdminMode(true);
-      localStorage.removeItem('moneylink_admin_direct_login');
     }
     
     const directAgentLogin = localStorage.getItem('moneylink_agent_direct_login');
@@ -223,7 +208,6 @@ const App: React.FC = () => {
             }
           });
       }
-      localStorage.removeItem('moneylink_agent_direct_login');
     }
     
     const savedUser = localStorage.getItem('moneylink_current_user');
@@ -318,6 +302,7 @@ const App: React.FC = () => {
     setIsAgentMode(false);
     setIsDeveloperMode(false);
     setActiveSection('home');
+    localStorage.setItem('moneylink_admin_direct_login', 'true');
   };
 
   const handleAgentLogin = (agent: Agent) => {
@@ -327,6 +312,8 @@ const App: React.FC = () => {
     setIsDeveloperMode(false);
     setActiveSection('agent');
     setShowAgentLogin(false);
+    localStorage.setItem('moneylink_agent_direct_login', 'true');
+    localStorage.setItem('moneylink_current_agent_id', agent.id);
   };
 
   const handleDeveloperLogin = () => {
@@ -343,6 +330,9 @@ const App: React.FC = () => {
     setIsAgentMode(false);
     setIsDeveloperMode(false);
     localStorage.removeItem('moneylink_current_user');
+    localStorage.removeItem('moneylink_admin_direct_login');
+    localStorage.removeItem('moneylink_agent_direct_login');
+    localStorage.removeItem('moneylink_current_agent_id');
     setNotifications([]);
     setActiveSection('home');
     setIsMenuOpen(false);
@@ -555,7 +545,7 @@ const App: React.FC = () => {
           className="absolute bottom-8 left-0 right-0 text-center"
         >
           <p className="text-[8px] text-white/30 font-bold uppercase tracking-[0.2em]">Developed By</p>
-          <p className="text-[10px] text-white/50 font-black">DMI GROUP</p>
+          <p className="text-[10px] text-white/50 font-black">Derick Musiyalike (DMI GROUP)</p>
         </motion.div>
 
         {/* Decorative Background */}
@@ -741,6 +731,7 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <VerticalScale />
+      <VerticalScrollHandle />
 
       {/* Main Content */}
       <main className={`w-full max-w-[1920px] mx-auto pt-24 pb-32 px-4 sm:px-6 lg:px-8 min-h-screen flex flex-col ${isDarkMode ? 'text-white' : 'text-[#1A1A1A]'}`}>
@@ -753,6 +744,15 @@ const App: React.FC = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -20, scale: 0.98 }}
                 transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                onPanEnd={(_, info) => {
+                  const threshold = 50;
+                  const currentIndex = navItems.findIndex(item => item.id === activeSection);
+                  if (info.offset.y < -threshold && currentIndex < navItems.length - 1) {
+                    setActiveSection(navItems[currentIndex + 1].id as Section);
+                  } else if (info.offset.y > threshold && currentIndex > 0) {
+                    setActiveSection(navItems[currentIndex - 1].id as Section);
+                  }
+                }}
               >
                 {renderSection()}
               </motion.div>
@@ -764,8 +764,8 @@ const App: React.FC = () => {
         <div className="mt-12 mb-8 text-center space-y-3 opacity-50 hover:opacity-100 transition-opacity">
           <p className={`text-[9px] font-bold ${isDarkMode ? 'text-gray-400' : 'text-[#999]'} uppercase tracking-[0.3em]`}>Official Developer</p>
           <div className="space-y-0.5">
-            <p className={`text-[11px] font-black ${isDarkMode ? 'text-white' : 'text-[#1A1A1A]'}`}>DMI GROUP</p>
-            <p className={`text-[9px] ${isDarkMode ? 'text-gray-500' : 'text-[#666]'} font-bold`}>Lusaka, Zambia</p>
+            <p className={`text-[11px] font-black ${isDarkMode ? 'text-white' : 'text-[#1A1A1A]'}`}>Derick Musiyalike</p>
+            <p className={`text-[9px] ${isDarkMode ? 'text-gray-500' : 'text-[#666]'} font-bold`}>DMI GROUP • Lusaka, Zambia</p>
           </div>
           <div className="flex justify-center gap-4">
             <a href="mailto:derickmusiyalikeinstitution@gmail.com" className="text-[9px] font-bold text-green-700 hover:underline">EMAIL</a>
@@ -853,16 +853,6 @@ const App: React.FC = () => {
           ))}
         </div>
       </nav>
-
-      {showOnboarding && (
-        <Onboarding 
-          steps={onboardingSteps} 
-          onComplete={() => {
-            setShowOnboarding(false);
-            localStorage.setItem('moneylink_has_seen_onboarding', 'true');
-          }} 
-        />
-      )}
     </div>
   );
 };

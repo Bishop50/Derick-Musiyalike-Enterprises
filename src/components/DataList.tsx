@@ -20,11 +20,11 @@ interface DataListProps {
 const DataList: React.FC<DataListProps> = ({ transactions, title = "Recent Activity" }) => {
   const getIcon = (type: Transaction['type']) => {
     switch (type) {
-      case 'loan': return <Wallet className="w-5 h-5" />;
-      case 'payment': return <CreditCard className="w-5 h-5" />;
-      case 'investment': return <TrendingUp className="w-5 h-5" />;
-      case 'bill': return <Zap className="w-5 h-5" />;
-      default: return <ArrowUpRight className="w-5 h-5" />;
+      case 'loan': return <Wallet className="w-4 h-4" />;
+      case 'payment': return <CreditCard className="w-4 h-4" />;
+      case 'investment': return <TrendingUp className="w-4 h-4" />;
+      case 'bill': return <Zap className="w-4 h-4" />;
+      default: return <ArrowUpRight className="w-4 h-4" />;
     }
   };
 
@@ -44,33 +44,40 @@ const DataList: React.FC<DataListProps> = ({ transactions, title = "Recent Activ
   };
 
   return (
-    <div className="bg-white rounded-[2rem] border border-[#E5E5E5] shadow-sm overflow-hidden">
-      <div className="p-6 border-b border-[#F0F0F0] flex items-center justify-between">
-        <h3 className="font-bold text-lg">{title}</h3>
-        <button className="text-green-700 text-xs font-bold hover:underline">View All</button>
+    <div className="bg-white rounded-[2.5rem] border border-[#E5E5E5] shadow-sm overflow-hidden group/list">
+      <div className="p-8 border-b border-[#F0F0F0] flex items-center justify-between bg-gray-50/50">
+        <div>
+          <h3 className="font-black text-xl tracking-tight text-gray-900 uppercase">{title}</h3>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Live Transaction Stream</p>
+        </div>
+        <button className="bg-white border border-gray-200 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 hover:text-white hover:border-green-700 transition-all shadow-sm">
+          View All
+        </button>
       </div>
       <div className="divide-y divide-[#F0F0F0]">
         {transactions.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-[#999] text-sm font-medium">No transactions found.</p>
+          <div className="p-16 text-center">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="w-8 h-8 text-gray-200" />
+            </div>
+            <p className="text-[#999] text-sm font-bold uppercase tracking-widest">No transactions found.</p>
           </div>
         ) : (
           transactions.map((tx) => (
-            <div key={tx.id} className="p-5 flex items-center justify-between hover:bg-[#F9F9F9] transition-colors group">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl transition-colors ${
-                  tx.amount > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+            <div key={tx.id} className="p-6 flex items-center justify-between hover:bg-green-50/30 transition-all group cursor-pointer">
+              <div className="flex items-center gap-5">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 ${
+                  tx.amount > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
                 }`}>
-                  {tx.amount > 0 ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                  {tx.amount > 0 ? <ArrowDownLeft className="w-6 h-6" /> : <ArrowUpRight className="w-6 h-6" />}
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-[#1A1A1A]">{tx.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-[#999] font-medium uppercase tracking-wider">{tx.date}</span>
-                    <span className="w-1 h-1 bg-[#E5E5E5] rounded-full"></span>
-                    <div className="flex items-center gap-1">
+                  <p className="font-black text-sm text-gray-900 uppercase tracking-tight">{tx.title}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{tx.date}</span>
+                    <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-full border border-gray-100 shadow-sm">
                       {getStatusIcon(tx.status)}
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                      <span className={`text-[9px] font-black uppercase tracking-widest ${
                         tx.status === 'completed' ? 'text-green-600' : 
                         tx.status === 'pending' ? 'text-yellow-600' : 'text-red-600'
                       }`}>
@@ -81,14 +88,16 @@ const DataList: React.FC<DataListProps> = ({ transactions, title = "Recent Activ
                 </div>
               </div>
               <div className="text-right">
-                <p className={`font-black text-sm tracking-tighter ${
-                  tx.amount > 0 ? 'text-green-700' : 'text-[#1A1A1A]'
+                <p className={`font-black text-lg tracking-tighter ${
+                  tx.amount > 0 ? 'text-green-700' : 'text-gray-900'
                 }`}>
                   {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
                 </p>
-                <div className="flex items-center justify-end gap-1.5 mt-1 text-[#999]">
-                  {getIcon(tx.type)}
-                  <span className="text-[9px] font-bold uppercase tracking-widest">{tx.type}</span>
+                <div className="flex items-center justify-end gap-2 mt-1 text-gray-400">
+                  <div className="p-1 bg-gray-50 rounded-md">
+                    {getIcon(tx.type)}
+                  </div>
+                  <span className="text-[9px] font-black uppercase tracking-widest">{tx.type}</span>
                 </div>
               </div>
             </div>

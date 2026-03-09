@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import logo from '../assets/logo.png';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Brain,
   Settings, 
@@ -43,9 +43,10 @@ import {
   Search,
   ArrowLeft,
   FileText,
-  CheckCircle
+  CheckCircle,
+  Send
 } from 'lucide-react';
-import { User, AIServer, SystemConfig, Admin, AppRequest, Meeting, StreamingApp, Tool, Agent, LoanRequest } from '../types';
+import { User, AIServer, SystemConfig, Admin, AppRequest, Meeting, StreamingApp, Tool, Agent, LoanRequest, ChatMessage } from '../types';
 
 import SupportChat from './SupportChat';
 import AILab from './AILab';
@@ -61,7 +62,7 @@ interface DeveloperPanelProps {
 import { sendPushNotification } from '../utils/notifications';
 
 const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ onLogout, onBack, onUpdateConfig }) => {
-  const [activePanel, setActivePanel] = useState<'system' | 'users' | 'agents' | 'ai' | 'database' | 'logs' | 'toolbox' | 'invitations' | 'memory' | 'admins' | 'app-requests' | 'meetings' | 'tools' | 'streaming' | 'storage' | 'browser' | 'code-editor' | 'ai-publish' | 'loan-requests'>('system');
+  const [activePanel, setActivePanel] = useState<'system' | 'users' | 'agents' | 'ai' | 'database' | 'logs' | 'toolbox' | 'invitations' | 'memory' | 'admins' | 'app-requests' | 'meetings' | 'tools' | 'streaming' | 'storage' | 'browser' | 'code-editor' | 'ai-publish' | 'loan-requests' | 'user-chat'>('system');
   const [config, setConfig] = useState<SystemConfig>({
     appName: 'MoneyLink Financial',
     appLogo: logo,
@@ -262,6 +263,51 @@ Development Team`);
   };
 
   const [agentRequests, setAgentRequests] = useState<any[]>([]);
+
+  const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newChatMessage, setNewChatMessage] = useState('');
+
+  const handleSendChatMessage = async () => {
+    if (!selectedUserForChat || !newChatMessage.trim()) return;
+    
+    const msg: ChatMessage = {
+      id: Math.random().toString(36).substr(2, 9),
+      senderId: 'developer',
+      receiverId: selectedUserForChat.id,
+      text: newChatMessage,
+      timestamp: new Date().toISOString(),
+      isAdmin: true
+    };
+    
+    try {
+      await fetch('/api/chat-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...msg, chatId: selectedUserForChat.id })
+      });
+      setChatMessages(prev => [...prev, msg]);
+      setNewChatMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedUserForChat && activePanel === 'user-chat') {
+      const fetchMessages = async () => {
+        const res = await fetch(`/api/chat-messages?chatId=${selectedUserForChat.id}`);
+        if (res.ok) setChatMessages(await res.json());
+      };
+      fetchMessages();
+      const interval = setInterval(fetchMessages, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedUserForChat, activePanel]);
+
+  const [showDocModal, setShowDocModal] = useState<{ type: string, url: string } | null>(null);
+  const [showMapModal, setShowMapModal] = useState<{ lat: number, lng: number } | null>(null);
 
   const fetchData = async () => {
     const fetchWithFallback = async (url: string, fallback: any = []) => {
@@ -789,6 +835,15 @@ Development Team`);
           >
             <FileText className="w-4 h-4" />
             LOAN_REQUESTS
+          </button>
+          <button
+            onClick={() => setActivePanel('user-chat')}
+            className={`px-6 py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activePanel === 'user-chat' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/60 hover:text-white'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            USER_CHAT
           </button>
           <button
             onClick={() => setActivePanel('logs')}
@@ -1595,6 +1650,19 @@ Development Team`);
                         <p className="text-[8px] text-blue-400 font-bold mt-1">ADMIN_ID: {user.adminId || 'GLOBAL'}</p>
                       </div>
                       <div className="flex gap-2">
+                        {user.nrcFront && <button onClick={() => setShowDocModal({ type: 'NRC Front', url: user.nrcFront! })} className="p-2 bg-white/5 rounded-lg text-white/40 hover:text-white" title="NRC Front"><ImageIcon className="w-4 h-4" /></button>}
+                        {user.selfiePhoto && <button onClick={() => setShowDocModal({ type: 'Selfie', url: user.selfiePhoto! })} className="p-2 bg-white/5 rounded-lg text-white/40 hover:text-white" title="Selfie"><ImageIcon className="w-4 h-4" /></button>}
+                        {user.passportPhoto && <button onClick={() => setShowDocModal({ type: 'Passport', url: user.passportPhoto! })} className="p-2 bg-white/5 rounded-lg text-white/40 hover:text-white" title="Passport"><ImageIcon className="w-4 h-4" /></button>}
+                        <button 
+                          onClick={() => {
+                            setSelectedUserForChat(user);
+                            setActivePanel('user-chat');
+                          }}
+                          className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
+                          title="Chat with User"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
                         <button 
                           onClick={() => {
                             const updatedUser = { ...user, isVerified: !user.isVerified };
@@ -1606,13 +1674,7 @@ Development Team`);
                           <Shield className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => {
-                            const newBalance = prompt(`Enter new balance for ${user.name}:`, (user.balance || 0).toString());
-                            if (newBalance !== null) {
-                              const updatedUser = { ...user, balance: parseFloat(newBalance) };
-                              handleUpdateUser(updatedUser);
-                            }
-                          }}
+                          onClick={() => setEditingUser(user)}
                           className="p-2 hover:bg-blue-500/20 rounded-lg text-blue-400 transition-all"
                         >
                           <Settings className="w-4 h-4" />
@@ -2155,7 +2217,45 @@ Development Team`);
                   ))}
                 </div>
 
-                {editingDbKey && (
+                {/* Modals */}
+      {showDocModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#1A1A1A] border border-white/10 rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-xl font-bold uppercase tracking-tighter">{showDocModal.type}</h3>
+              <button onClick={() => setShowDocModal(null)} className="p-2 hover:bg-white/5 rounded-full transition-all">
+                <X className="w-6 h-6 text-white/40" />
+              </button>
+            </div>
+            <div className="p-8 flex items-center justify-center bg-black/40">
+              <img src={showDocModal.url} alt={showDocModal.type} className="max-w-full max-h-[60vh] rounded-2xl shadow-lg border border-white/10" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMapModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#1A1A1A] border border-white/10 rounded-[2.5rem] w-full max-w-4xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-xl font-bold uppercase tracking-tighter">User Location Override</h3>
+              <button onClick={() => setShowMapModal(null)} className="p-2 hover:bg-white/5 rounded-full transition-all">
+                <X className="w-6 h-6 text-white/40" />
+              </button>
+            </div>
+            <div className="h-[60vh] bg-black/40 relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <MapPin className="w-12 h-12 text-blue-500 mx-auto animate-bounce" />
+                  <p className="font-bold text-white/60">Latitude: {showMapModal.lat}<br/>Longitude: {showMapModal.lng}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingDbKey && (
                   <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-[#1A1A1A] w-full max-w-2xl rounded-[2rem] p-8 border border-white/10 space-y-6">
                       <div className="flex items-center justify-between">
@@ -2330,6 +2430,86 @@ Development Team`);
               </motion.div>
             )}
 
+            {activePanel === 'user-chat' && (
+              <motion.div 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 h-[600px] flex flex-col"
+              >
+                <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                  <h2 className="text-xl font-bold">User Chat Override</h2>
+                  {selectedUserForChat && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">
+                        {selectedUserForChat.name.charAt(0)}
+                      </div>
+                      <p className="font-bold text-sm">{selectedUserForChat.name}</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex-1 flex overflow-hidden gap-4">
+                  <div className="w-1/3 border-r border-white/10 overflow-y-auto pr-4 space-y-2">
+                    {users.map(user => (
+                      <button 
+                        key={`chat-user-${user.id}`}
+                        onClick={() => setSelectedUserForChat(user)}
+                        className={`w-full p-3 flex items-center gap-3 rounded-xl transition-all ${selectedUserForChat?.id === user.id ? 'bg-blue-600 text-white' : 'hover:bg-white/5 text-white/60'}`}
+                      >
+                        <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center font-bold text-xs">
+                          {user.name.charAt(0)}
+                        </div>
+                        <div className="text-left overflow-hidden">
+                          <p className="font-bold text-xs truncate">{user.name}</p>
+                          <p className="text-[8px] opacity-60">ID: {user.id}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="flex-1 flex flex-col bg-black/20 rounded-2xl overflow-hidden">
+                    {selectedUserForChat ? (
+                      <>
+                        <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                          {chatMessages.map(msg => (
+                            <div key={msg.id} className={`flex ${msg.isAdmin ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[80%] p-3 rounded-2xl text-[11px] font-medium ${msg.isAdmin ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white/10 border border-white/10 rounded-tl-none text-white'}`}>
+                                {msg.text}
+                                <p className="text-[8px] mt-1 opacity-60">
+                                  {new Date(msg.timestamp).toLocaleTimeString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="p-4 bg-white/5 border-t border-white/10 flex gap-2">
+                          <input 
+                            type="text"
+                            value={newChatMessage}
+                            onChange={(e) => setNewChatMessage(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
+                            placeholder="Type override message..."
+                            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-blue-600"
+                          />
+                          <button 
+                            onClick={handleSendChatMessage}
+                            className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-white/20 space-y-4">
+                        <MessageSquare className="w-12 h-12 opacity-20" />
+                        <p className="text-sm font-medium">Select a user to initiate chat override</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {activePanel === 'logs' && (
               <motion.div 
                 initial={{ opacity: 0, x: -20 }}
@@ -2445,6 +2625,105 @@ Development Team`);
           </div>
         </div>
       </div>
+      
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-[#1A1A1A] w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative border border-white/10"
+            >
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full text-white/40 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-white">Edit User Profile</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Full Name</label>
+                    <input 
+                      value={editingUser.name}
+                      onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Phone Number</label>
+                    <input 
+                      value={editingUser.phone}
+                      onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">NRC Number</label>
+                    <input 
+                      value={editingUser.nrc || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, nrc: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Password</label>
+                    <input 
+                      type="text"
+                      value={editingUser.password || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Leave blank to keep current password"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Balance (K)</label>
+                    <input 
+                      type="number"
+                      value={editingUser.balance || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, balance: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Enter balance"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-green-500/10 rounded-xl border border-green-500/20">
+                    <span className="text-xs font-bold text-green-400">Verification Status</span>
+                    <button 
+                      onClick={() => setEditingUser({ ...editingUser, isVerified: !editingUser.isVerified })}
+                      className={`w-10 h-5 rounded-full transition-all relative ${editingUser.isVerified ? 'bg-green-500' : 'bg-white/20'}`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${editingUser.isVerified ? 'right-1' : 'left-1'}`}></div>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-red-500/10 rounded-xl border border-red-500/20">
+                    <span className="text-xs font-bold text-red-400">Freeze Account</span>
+                    <button 
+                      onClick={() => setEditingUser({ ...editingUser, isFrozen: !editingUser.isFrozen })}
+                      className={`w-10 h-5 rounded-full transition-all relative ${editingUser.isFrozen ? 'bg-red-500' : 'bg-white/20'}`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${editingUser.isFrozen ? 'right-1' : 'left-1'}`}></div>
+                    </button>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    handleUpdateUser(editingUser);
+                    setEditingUser(null);
+                  }}
+                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <SupportChat currentUser={null} role="developer" config={config} />
     </div>
   );
