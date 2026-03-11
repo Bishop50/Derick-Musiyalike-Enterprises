@@ -6,9 +6,10 @@ import { Agent } from '../types';
 interface AgentLoginProps {
   onLogin: (agent: Agent) => void;
   onCancel: () => void;
+  appConfig?: { name: string, logo: string };
 }
 
-const AgentLogin: React.FC<AgentLoginProps> = ({ onLogin, onCancel }) => {
+const AgentLogin: React.FC<AgentLoginProps> = ({ onLogin, onCancel, appConfig }) => {
   const [mode, setMode] = useState<'login' | 'request'>('login');
   const [agentId, setAgentId] = useState('');
   const [password, setPassword] = useState('');
@@ -74,9 +75,22 @@ const AgentLogin: React.FC<AgentLoginProps> = ({ onLogin, onCancel }) => {
         className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden border border-[#E5E5E5]"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 bg-purple-600 text-white rounded-3xl flex items-center justify-center shadow-lg shadow-purple-600/30 mb-4">
-            <Headphones className="w-10 h-10" />
-          </div>
+          {appConfig?.logo ? (
+            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto border-4 border-purple-100 shadow-xl overflow-hidden mb-4">
+              <img 
+                src={appConfig.logo} 
+                alt="Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://placehold.co/200x200/9333ea/ffffff?text=Agent";
+                }}
+              />
+            </div>
+          ) : (
+            <div className="w-20 h-20 bg-purple-600 text-white rounded-3xl flex items-center justify-center shadow-lg shadow-purple-600/30 mb-4">
+              <Headphones className="w-10 h-10" />
+            </div>
+          )}
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">
             {mode === 'login' ? 'Agent Portal' : 'Join the Team'}
           </h2>

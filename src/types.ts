@@ -1,4 +1,4 @@
-export type Section = 'home' | 'apply-loan' | 'my-loans' | 'digital-services' | 'trust' | 'account' | 'developer' | 'transactions' | 'settings' | 'help' | 'agent' | 'ai-lab' | 'tax';
+export type Section = 'home' | 'apply-loan' | 'my-loans' | 'digital-services' | 'trust' | 'account' | 'developer' | 'transactions' | 'settings' | 'help' | 'agent' | 'ai-lab' | 'tax' | 'notifications';
 export type Role = 'user' | 'admin' | 'developer' | 'agent';
 
 export interface User {
@@ -219,8 +219,9 @@ export interface Task {
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high';
-  status: 'pending' | 'completed';
+  status: 'pending' | 'in progress' | 'completed';
   createdAt: string;
+  assignedTo?: string;
 }
 
 export interface SystemConfig {

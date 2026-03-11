@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import bodyParser from 'body-parser';
 import fs from 'fs';
 import axios from 'axios';
 import { Server } from "socket.io";
@@ -22,7 +21,7 @@ async function startServer() {
 
   const PORT = 3000;
 
-  app.use(bodyParser.json());
+  app.use(express.json({ limit: '50mb' }));
 
   // Socket.io Signaling for WebRTC
   io.on("connection", (socket) => {
@@ -79,7 +78,7 @@ async function startServer() {
     const collections = [
       'servers', 'users', 'admins', 'appRequests', 'agents', 'meetings', 
       'streamingApps', 'tools', 'agentRequests', 'systemConfig', 'transactions',
-      'loanRequests', 'chatMessages', 'notifications', 'adminNotifications', 'recurringPayments'
+      'loanRequests', 'chatMessages', 'notifications', 'adminNotifications', 'recurringPayments', 'tasks'
     ];
     let updated = false;
     collections.forEach(c => {
@@ -98,6 +97,7 @@ async function startServer() {
 
   // API routes
   app.get("/api/health", (req, res) => {
+    console.log('Health check requested');
     res.json({ status: "ok", message: "AI Server Control Panel Server is running" });
   });
 
@@ -397,12 +397,14 @@ async function startServer() {
   });
 
   app.post('/api/users', (req, res) => {
+    console.log('Received registration request for user:', req.body.phone);
     const db = readDb();
     const newUser = { ...req.body };
     
     // Check for unique NRC and Phone
     const existingUser = db.users.find((u: any) => u.nrc === newUser.nrc || u.phone === newUser.phone);
     if (existingUser) {
+      console.log('Registration failed: User already exists');
       return res.status(400).json({ 
         message: existingUser.nrc === newUser.nrc 
           ? 'NRC number already registered' 
@@ -413,6 +415,7 @@ async function startServer() {
     if (!newUser.id) newUser.id = Date.now().toString();
     db.users.push(newUser);
     writeDb(db);
+    console.log('Registration successful for user:', newUser.id);
     res.status(201).json(newUser);
   });
 
@@ -465,14 +468,19 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', (req, res) => {
+    console.log('User update requested for ID:', req.params.id);
+    console.log('Request body:', JSON.stringify(req.body));
     const db = readDb();
     const userId = req.params.id;
     const index = db.users.findIndex((u: any) => u.id === userId || u.id.toString() === userId);
+    console.log('User index found:', index);
     if (index !== -1) {
       db.users[index] = { ...db.users[index], ...req.body };
       writeDb(db);
+      console.log('User updated successfully');
       res.json(db.users[index]);
     } else {
+      console.log('User not found');
       res.status(404).json({ message: 'User not found' });
     }
   });
@@ -514,7 +522,48 @@ async function startServer() {
     const requestId = req.params.id;
     const index = db.loanRequests.findIndex((r: any) => r.id === requestId || r.id.toString() === requestId);
     if (index !== -1) {
+      const oldStatus = db.loanRequests[index].status;
+      const newStatus = req.body.status;
+      
       db.loanRequests[index] = { ...db.loanRequests[index], ...req.body };
+      
+      // If loan is being approved, update user balance
+      if (oldStatus !== 'approved' && newStatus === 'approved') {
+        const userId = db.loanRequests[index].userId;
+        const amount = db.loanRequests[index].amount;
+        const userIndex = db.users.findIndex((u: any) => u.id === userId || u.id.toString() === userId);
+        
+        if (userIndex !== -1) {
+          db.users[userIndex].balance = (db.users[userIndex].balance || 0) + amount;
+          
+          // Add a transaction record
+          const newTransaction = {
+            id: Date.now().toString(),
+            userId: userId,
+            type: 'loan',
+            title: 'Loan Disbursement',
+            amount: amount,
+            date: new Date().toISOString(),
+            status: 'completed'
+          };
+          if (!db.transactions) db.transactions = [];
+          db.transactions.push(newTransaction);
+
+          // Add a notification for the user
+          const newNotification = {
+            id: Math.random().toString(36).substr(2, 9),
+            userId: userId,
+            title: 'Loan Approved',
+            message: `Your loan of K ${amount} has been approved and added to your balance.`,
+            date: new Date().toLocaleString(),
+            isRead: false,
+            type: 'loan'
+          };
+          if (!db.notifications) db.notifications = [];
+          db.notifications.push(newNotification);
+        }
+      }
+      
       writeDb(db);
       res.json(db.loanRequests[index]);
     } else {
@@ -524,6 +573,7 @@ async function startServer() {
 
   // Chat Messages routes
   app.get('/api/chat-messages', (req, res) => {
+    console.log('Chat messages requested:', req.query);
     const db = readDb();
     const { userId, adminId, chatId } = req.query;
     let messages = db.chatMessages;
@@ -611,6 +661,45 @@ async function startServer() {
     }
   });
 
+  // Tasks routes
+  app.get('/api/tasks', (req, res) => {
+    const db = readDb();
+    res.json(db.tasks || []);
+  });
+
+  app.post('/api/tasks', (req, res) => {
+    const db = readDb();
+    const newTask = { ...req.body };
+    if (!newTask.id) newTask.id = Date.now().toString();
+    if (!db.tasks) db.tasks = [];
+    db.tasks.push(newTask);
+    writeDb(db);
+    res.status(201).json(newTask);
+  });
+
+  app.put('/api/tasks/:id', (req, res) => {
+    const db = readDb();
+    const taskId = req.params.id;
+    if (!db.tasks) db.tasks = [];
+    const index = db.tasks.findIndex((t: any) => t.id === taskId || t.id.toString() === taskId);
+    if (index !== -1) {
+      db.tasks[index] = { ...db.tasks[index], ...req.body };
+      writeDb(db);
+      res.json(db.tasks[index]);
+    } else {
+      res.status(404).json({ message: 'Task not found' });
+    }
+  });
+
+  app.delete('/api/tasks/:id', (req, res) => {
+    const db = readDb();
+    const taskId = req.params.id;
+    if (!db.tasks) db.tasks = [];
+    db.tasks = db.tasks.filter((t: any) => t.id !== taskId && t.id.toString() !== taskId);
+    writeDb(db);
+    res.status(204).send();
+  });
+
   // Recurring Payments routes
   app.get('/api/recurring-payments', (req, res) => {
     const db = readDb();
@@ -685,6 +774,9 @@ async function startServer() {
         middlewareMode: true,
         hmr: {
           server: httpServer
+        },
+        watch: {
+          ignored: ['**/db.json']
         }
       },
       appType: "spa",

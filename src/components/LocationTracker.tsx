@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapPin, AlertTriangle } from 'lucide-react';
 import { User } from '../types';
+import { saveUserToLocalStorage } from '../utils/storage';
 
 interface LocationTrackerProps {
   currentUser: User | null;
@@ -29,7 +30,7 @@ const LocationTracker: React.FC<LocationTrackerProps> = ({ currentUser, config }
         }
       };
       
-      localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+      saveUserToLocalStorage(updatedUser);
 
       // Update user in the main users list (Local Storage)
       const users: User[] = JSON.parse(localStorage.getItem('moneylink_users') || '[]');
@@ -40,11 +41,21 @@ const LocationTracker: React.FC<LocationTrackerProps> = ({ currentUser, config }
       }
 
       // Update backend
+      console.log('Updating location on backend:', `/api/users/${currentUser.id}`, updatedUser.location);
       fetch(`/api/users/${currentUser.id}`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ location: updatedUser.location })
-      }).catch(err => console.error('Failed to update location on backend:', err));
+      })
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${text}`);
+        }
+        return res.json();
+      })
+      .then(data => console.log('Location updated successfully:', data))
+      .catch(err => console.error('Failed to update location on backend:', err));
 
       // Notify admin (simulated)
       const adminNotifications = JSON.parse(localStorage.getItem('moneylink_admin_notifications') || '[]');

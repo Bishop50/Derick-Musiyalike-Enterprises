@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Smartphone, Lock, Eye, EyeOff, ArrowRight, X, Shield } from 'lucide-react';
 import { User } from '../types';
@@ -18,9 +18,20 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
   const [newPassword, setNewPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [resendTimer, setResendTimer] = useState(60);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (step === 'forgot-otp' && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, resendTimer]);
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -115,6 +126,7 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
         window.crypto.getRandomValues(array);
         const newOtp = (array[0] % 900000 + 100000).toString();
         setGeneratedOtp(newOtp);
+        setResendTimer(60);
         console.log('OTP Sent to +260' + phone + ': ' + newOtp);
       } else {
         setError('Phone number not registered');
@@ -355,6 +367,22 @@ const LoginFlow: React.FC<LoginFlowProps> = ({ onLogin, onAdminLogin, onCancel, 
                   className="w-full px-4 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-2xl font-black text-center tracking-[1rem] focus:outline-none focus:border-green-700"
                   placeholder="000000"
                 />
+
+                <div className="text-center">
+                  <button 
+                    onClick={() => {
+                      if (resendTimer === 0) {
+                        const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                        setGeneratedOtp(newOtp);
+                        setResendTimer(60);
+                      }
+                    }}
+                    disabled={resendTimer > 0}
+                    className={`text-xs font-bold ${resendTimer > 0 ? 'text-gray-400' : 'text-green-700 hover:underline'}`}
+                  >
+                    {resendTimer > 0 ? `Resend Code in 0:${resendTimer.toString().padStart(2, '0')}` : 'Resend Code'}
+                  </button>
+                </div>
 
                 <button 
                   onClick={handleVerifyOtp}

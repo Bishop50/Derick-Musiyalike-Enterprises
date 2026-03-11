@@ -8,9 +8,10 @@ import 'jspdf-autotable';
 interface TransactionsSectionProps {
   onBack: () => void;
   currentUser: any;
+  isAdmin?: boolean;
 }
 
-const TransactionsSection: React.FC<TransactionsSectionProps> = ({ onBack, currentUser }) => {
+const TransactionsSection: React.FC<TransactionsSectionProps> = ({ onBack, currentUser, isAdmin }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +25,10 @@ const TransactionsSection: React.FC<TransactionsSectionProps> = ({ onBack, curre
     doc.text('Transaction Statement', 14, 22);
     doc.setFontSize(11);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-    doc.text(`Account Holder: ${currentUser?.name}`, 14, 36);
-    doc.text(`Phone: +260 ${currentUser?.phone}`, 14, 42);
+    doc.text(`Account Holder: ${currentUser?.name || 'Admin'}`, 14, 36);
+    if (!isAdmin) {
+      doc.text(`Phone: +260 ${currentUser?.phone}`, 14, 42);
+    }
 
     const tableData = filteredTransactions.map(tx => [
       new Date(tx.date).toLocaleDateString(),
@@ -46,12 +49,13 @@ const TransactionsSection: React.FC<TransactionsSectionProps> = ({ onBack, curre
   };
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser && !isAdmin) return;
 
     const fetchTransactions = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/transactions?userId=${currentUser.id}`);
+        const url = isAdmin ? '/api/transactions' : `/api/transactions?userId=${currentUser.id}`;
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error('Failed to fetch transactions');
         }
@@ -62,14 +66,18 @@ const TransactionsSection: React.FC<TransactionsSectionProps> = ({ onBack, curre
         setError(err.message || 'An error occurred');
         // Fallback to local storage if API fails
         const allTransactions: Transaction[] = JSON.parse(localStorage.getItem('moneylink_transactions') || '[]');
-        setTransactions(allTransactions.filter(t => t.userId === currentUser.id));
+        if (isAdmin) {
+            setTransactions(allTransactions);
+        } else {
+            setTransactions(allTransactions.filter(t => t.userId === currentUser.id));
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchTransactions();
-  }, [currentUser]);
+  }, [currentUser, isAdmin]);
 
   const filteredTransactions = transactions.filter(tx => {
     // Filter by type

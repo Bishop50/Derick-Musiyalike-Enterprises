@@ -36,7 +36,9 @@ import {
   Smartphone,
   Check,
   X,
-  Filter
+  Filter,
+  Bell,
+  ClipboardList
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -57,21 +59,24 @@ import {
   Cell
 } from 'recharts';
 
-import { User, LoanRequest, ChatMessage, Agent, Meeting, StreamingApp, AppRequest, Admin, Transaction } from '../types';
+import { User, LoanRequest, ChatMessage, Agent, Meeting, StreamingApp, AppRequest, Admin, Transaction, Task } from '../types';
+import { saveUserToLocalStorage, getUserFromLocalStorage } from '../utils/storage';
 
 import SupportChat from './SupportChat';
 import LiveMeeting from './LiveMeeting';
-import ZoomControl from './ZoomControl';
 
 interface AdminPanelProps {
   onLogout: () => void;
   isDeveloper?: boolean;
   onBack?: () => void;
+  onOpenNotifications?: () => void;
+  hasUnreadNotifications?: boolean;
+  appConfig?: { name: string, logo: string };
 }
 
 import { sendPushNotification } from '../utils/notifications';
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack, onOpenNotifications, hasUnreadNotifications, appConfig }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(isDeveloper || false);
   const [adminUser, setAdminUser] = useState('');
   const [password, setPassword] = useState('');
@@ -82,7 +87,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [streamingApps, setStreamingApps] = useState<StreamingApp[]>([]);
   const [agentRequests, setAgentRequests] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'services' | 'system' | 'workplace' | 'storage' | 'chat' | 'agents' | 'meetings' | 'streaming' | 'live-meeting' | 'transactions' | 'agent-requests' | 'servers' | 'tools' | 'app-requests'>(() => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'services' | 'system' | 'workplace' | 'storage' | 'chat' | 'agents' | 'meetings' | 'streaming' | 'live-meeting' | 'transactions' | 'agent-requests' | 'servers' | 'tools' | 'app-requests' | 'tasks' | 'loan-requests' | 'recurring-payments'>(() => {
     return (localStorage.getItem('moneylink_admin_active_tab') as any) || 'requests';
   });
 
@@ -90,6 +96,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
     localStorage.setItem('moneylink_admin_active_tab', activeTab);
   }, [activeTab]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'frozen' | 'verified' | 'pending'>('all');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
 
@@ -109,6 +116,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
     }
   };
   const [selectedUserForChat, setSelectedUserForChat] = useState<User | null>(null);
+  const [showChatModal, setShowChatModal] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
@@ -138,6 +146,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
 
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [showRecruitAgentModal, setShowRecruitAgentModal] = useState(false);
+  const [showAssignTaskModal, setShowAssignTaskModal] = useState(false);
+  const [selectedAgentForTask, setSelectedAgentForTask] = useState<Agent | null>(null);
+  const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'medium' as 'low' | 'medium' | 'high' });
   const [showDocModal, setShowDocModal] = useState<{ type: string, url: string } | null>(null);
   const [showMapModal, setShowMapModal] = useState<{ lat: number, lng: number } | null>(null);
   const [newUser, setNewUser] = useState({ name: '', phone: '', nrc: '', password: '' });
@@ -325,7 +336,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
             backendUsers, backendAgents, backendMeetings, backendStreaming, 
             allRequests, backendConfig, backendTransactions, backendLoanRequests,
             backendChatMessages, backendAdminNotifications, backendRecurringPayments,
-            backendAgentRequests
+            backendAgentRequests, backendTasks
           ] = await Promise.all([
             fetchWithFallback(`/api/users${adminIdParam}`),
             fetchWithFallback(`/api/agents${adminIdParam}`),
@@ -338,7 +349,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
             fetchWithFallback(`/api/chat-messages${adminIdParam}`),
             fetchWithFallback('/api/admin-notifications'),
             fetchWithFallback('/api/recurring-payments'),
-            fetchWithFallback('/api/agent-requests')
+            fetchWithFallback('/api/agent-requests'),
+            fetchWithFallback('/api/tasks')
           ]);
           
           setUsers(backendUsers);
@@ -349,6 +361,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
           setTransactions(backendTransactions);
           setLoanRequests(backendLoanRequests);
           setChatMessages(backendChatMessages);
+          setTasks(backendTasks || []);
           setAdminNotifications(backendAdminNotifications);
           setRecurringPayments(backendRecurringPayments);
           setAgentRequests(backendAgentRequests);
@@ -787,6 +800,37 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
     doc.save(`${config.appName.toLowerCase().replace(/\s+/g, '_')}_loan_approval_${request.id}.pdf`);
   };
 
+  const handleAssignTask = async () => {
+    if (!selectedAgentForTask || !newTask.title) return;
+
+    const taskData = {
+      title: newTask.title,
+      description: newTask.description,
+      priority: newTask.priority,
+      status: 'pending',
+      assignedTo: selectedAgentForTask.id,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskData)
+      });
+
+      if (res.ok) {
+        alert(`Task assigned to ${selectedAgentForTask.name}`);
+        setShowAssignTaskModal(false);
+        setNewTask({ title: '', description: '', priority: 'medium' });
+        setSelectedAgentForTask(null);
+      }
+    } catch (error) {
+      console.error('Failed to assign task:', error);
+      alert('Failed to assign task. Please try again.');
+    }
+  };
+
   const handleApprove = async (requestId: string) => {
     const request = loanRequests.find(r => r.id === requestId);
     if (!request) return;
@@ -806,6 +850,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
         );
         setLoanRequests(updatedRequests);
 
+        // Update User Balance via API
         const userToUpdate = users.find(u => u.id === request.userId);
         if (userToUpdate) {
           const updatedUser = { ...userToUpdate, balance: (userToUpdate.balance || 0) + request.amount };
@@ -814,9 +859,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedUser)
           });
+          
           setUsers(users.map(u => u.id === request.userId ? updatedUser : u));
+        }
 
-          // Send Notification to User
+        // Add Notification via API
+        await fetch('/api/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: request.userId,
+            title: 'Loan Approved',
+            message: `Your loan of K ${request.amount} has been approved and added to your balance.`,
+            isRead: false,
+            type: 'loan'
+          })
+        });
+
+        // Send Notification to User
+        if (userToUpdate) {
           const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
           userNotifications.push({
             id: Math.random().toString(36).substr(2, 9),
@@ -866,9 +927,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
         setUsers(users.map(u => u.id === request.userId ? updatedUser : u));
         
         // Update current user if they are the one logged in
-        const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+        const currentUser = getUserFromLocalStorage();
         if (currentUser && currentUser.id === request.userId) {
-          localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+          saveUserToLocalStorage(updatedUser);
         }
       }
 
@@ -911,10 +972,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
 
       // Update current user if they are the one logged in
-      const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+      const currentUser = getUserFromLocalStorage();
       if (currentUser && currentUser.id === request.userId) {
         const updatedCurrentUser = { ...currentUser, balance: (currentUser.balance || 0) + request.amount };
-        localStorage.setItem('moneylink_current_user', JSON.stringify(updatedCurrentUser));
+        saveUserToLocalStorage(updatedCurrentUser);
       }
 
       // Send Notification
@@ -977,7 +1038,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       console.error('Failed to send message via API, falling back to local storage', error);
       const updatedMessages = [...chatMessages, msg];
       setChatMessages(updatedMessages);
-      localStorage.setItem('moneylink_chats', JSON.stringify(updatedMessages));
+      
+      const userChats = JSON.parse(localStorage.getItem(`moneylink_chats_${selectedUserForChat.id}`) || '[]');
+      localStorage.setItem(`moneylink_chats_${selectedUserForChat.id}`, JSON.stringify([...userChats, msg]));
       
       // Send Notification to User (Fallback)
       const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
@@ -1125,6 +1188,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
 
   const handleUpdateUser = async (updatedUser: User) => {
     try {
+      const originalUser = users.find(u => u.id === updatedUser.id);
+      
       await fetch(`/api/users/${updatedUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1136,9 +1201,58 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
       localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
       
       // Update current user if they are the one being edited
-      const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+      const currentUser = getUserFromLocalStorage();
       if (currentUser && currentUser.id === updatedUser.id) {
-        localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+        saveUserToLocalStorage(updatedUser);
+      }
+      
+      // Check if isVerified or balance changed
+      if (originalUser) {
+        let messageText = '';
+        if (!originalUser.isVerified && updatedUser.isVerified) {
+          messageText += 'Your profile has been verified. ';
+        }
+        if (originalUser.balance !== updatedUser.balance) {
+          messageText += `Your balance has been updated to K ${(updatedUser.balance || 0).toLocaleString()}. `;
+        }
+        
+        if (messageText) {
+          const msg: ChatMessage = {
+            id: Date.now().toString(),
+            senderId: 'admin',
+            receiverId: updatedUser.id,
+            text: messageText.trim(),
+            timestamp: new Date().toISOString(),
+            isAdmin: true
+          };
+          
+          try {
+            await fetch('/api/chats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(msg)
+            });
+            setChatMessages(prev => [...prev, msg]);
+          } catch (e) {
+            const updatedMessages = [...chatMessages, msg];
+            setChatMessages(updatedMessages);
+            const userChats = JSON.parse(localStorage.getItem(`moneylink_chats_${updatedUser.id}`) || '[]');
+            localStorage.setItem(`moneylink_chats_${updatedUser.id}`, JSON.stringify([...userChats, msg]));
+          }
+          
+          // Send Notification to User
+          const userNotifications = JSON.parse(localStorage.getItem('moneylink_notifications') || '[]');
+          userNotifications.push({
+            id: Math.random().toString(36).substr(2, 9),
+            userId: updatedUser.id,
+            title: 'Profile Updated',
+            message: messageText.trim(),
+            date: new Date().toLocaleString(),
+            isRead: false,
+            type: 'system'
+          });
+          localStorage.setItem('moneylink_notifications', JSON.stringify(userNotifications));
+        }
       }
       
       setEditingUser(null);
@@ -1289,13 +1403,62 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex">
+      {/* Developer Actions Overlay */}
+      {isDeveloper && (
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
+          <button 
+            onClick={() => {
+              let dataToDownload: any = [];
+              let filename = 'data.json';
+              switch (activeTab) {
+                case 'users': dataToDownload = users; filename = 'users.json'; break;
+                case 'agents': dataToDownload = agents; filename = 'agents.json'; break;
+                case 'loan-requests': dataToDownload = loanRequests; filename = 'loan-requests.json'; break;
+                case 'transactions': dataToDownload = transactions; filename = 'transactions.json'; break;
+                case 'meetings': dataToDownload = meetings; filename = 'meetings.json'; break;
+                case 'streaming': dataToDownload = streamingApps; filename = 'streaming-apps.json'; break;
+                case 'app-requests': dataToDownload = myAppRequests; filename = 'app-requests.json'; break;
+                case 'tasks': dataToDownload = tasks; filename = 'tasks.json'; break;
+                case 'recurring-payments': dataToDownload = recurringPayments; filename = 'recurring-payments.json'; break;
+                case 'agent-requests': dataToDownload = agentRequests; filename = 'agent-requests.json'; break;
+                default: dataToDownload = { users, agents, loanRequests, transactions }; filename = 'all-data.json';
+              }
+              const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="p-4 bg-black text-white rounded-full shadow-2xl hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+            title="Developer: Download Current Data"
+          >
+            <FileDown className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-[#E5E5E5] flex flex-col fixed h-full z-10">
         <div className="p-6 border-b border-[#E5E5E5]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-700 text-white rounded-xl flex items-center justify-center shadow-sm">
-              <Shield className="w-5 h-5" />
-            </div>
+            {appConfig?.logo ? (
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-gray-100">
+                <img 
+                  src={appConfig.logo} 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://placehold.co/100x100/15803d/ffffff?text=Admin";
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 bg-green-700 text-white rounded-xl flex items-center justify-center shadow-sm">
+                <Shield className="w-5 h-5" />
+              </div>
+            )}
             <div>
               <h1 className="text-sm font-bold leading-tight">
                 {currentAdmin?.isMainAdmin ? 'DMI Admin' : currentAdmin?.companyName || 'Admin'}
@@ -1305,6 +1468,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                 <span className="text-[8px] font-bold text-green-700 uppercase tracking-widest">Active</span>
               </div>
             </div>
+            {onOpenNotifications && (
+              <button 
+                onClick={onOpenNotifications}
+                className="ml-auto relative p-2 hover:bg-gray-100 rounded-xl transition-all"
+              >
+                <Bell className="w-4 h-4 text-gray-600" />
+                {hasUnreadNotifications && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1386,6 +1560,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
           >
             <UserPlus className="w-4 h-4" />
             Agents
+          </button>
+          <button
+            onClick={() => setActiveTab('tasks' as any)}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${
+              activeTab === ('tasks' as any) ? 'bg-green-50 text-green-700' : 'text-[#666] hover:bg-gray-50'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            Tasks
           </button>
           <button
             onClick={() => setActiveTab('agent-requests')}
@@ -1475,6 +1658,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
         <div className="max-w-5xl mx-auto space-y-8">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold capitalize">{activeTab.replace('-', ' ')}</h2>
+            <div className="flex items-center gap-4">
+              {onOpenNotifications && (
+                <button 
+                  onClick={onOpenNotifications}
+                  className="p-3 bg-white border border-[#E5E5E5] rounded-2xl hover:bg-gray-50 transition-all relative"
+                >
+                  <Bell className="w-5 h-5 text-[#666]" />
+                  {hasUnreadNotifications && (
+                    <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="bg-white rounded-[2rem] border border-[#E5E5E5] shadow-sm overflow-hidden">
@@ -1570,12 +1766,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                           onClick={() => {
                             localStorage.setItem('moneylink_agent_direct_login', 'true');
                             localStorage.setItem('moneylink_current_agent_id', agent.id);
-                            window.location.href = `/?mode=agent&id=${agent.id}`;
+                            window.open(`/?mode=agent&id=${agent.id}`, '_blank');
                           }}
                           className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white transition-all"
                           title="Login as Agent"
                         >
                           <LogOut className="w-4 h-4 rotate-180" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSelectedAgentForTask(agent);
+                            setShowAssignTaskModal(true);
+                          }}
+                          className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all"
+                          title="Assign Task"
+                        >
+                          <ClipboardList className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => setEditingAgent(agent)}
@@ -1587,6 +1793,61 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : activeTab === ('tasks' as any) ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">All Agent Tasks</h2>
+                  <div className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">{tasks.length} Total Tasks</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {tasks.length === 0 ? (
+                    <div className="text-center py-20 bg-[#F8F9FA] rounded-[2rem] border border-dashed border-[#E5E5E5]">
+                      <ClipboardList className="w-12 h-12 text-[#CCC] mx-auto mb-4" />
+                      <p className="text-[#999] font-bold">No tasks have been assigned yet.</p>
+                    </div>
+                  ) : (
+                    tasks.map(task => (
+                      <div key={task.id} className="p-6 bg-white border border-[#E5E5E5] rounded-2xl flex items-center justify-between hover:border-blue-500 transition-all">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <h3 className="font-bold">{task.title}</h3>
+                            <span className={`px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase ${
+                              task.priority === 'high' ? 'bg-red-50 text-red-600' :
+                              task.priority === 'medium' ? 'bg-amber-50 text-amber-600' :
+                              'bg-green-50 text-green-600'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#666]">{task.description}</p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <p className="text-[10px] text-[#999] font-bold uppercase">Assigned To: {agents.find(a => a.id === task.assignedTo)?.name || 'Unknown Agent'}</p>
+                            <p className="text-[10px] text-[#999] font-bold uppercase">Status: <span className={`ml-1 ${
+                              task.status === 'completed' ? 'text-green-600' :
+                              task.status === 'in progress' ? 'text-blue-600' :
+                              'text-amber-600'
+                            }`}>{task.status}</span></p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            if (confirm('Delete this task?')) {
+                              await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+                              setTasks(tasks.filter(t => t.id !== task.id));
+                            }
+                          }}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             ) : activeTab === 'meetings' ? (
@@ -1951,7 +2212,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
               </div>
             ) : activeTab === 'users' ? (
               <div className="overflow-x-auto">
-                <div className="p-6 border-b border-[#F0F0F0] flex justify-end">
+                <div className="p-6 border-b border-[#F0F0F0] flex justify-between items-center">
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="px-4 py-2 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold">
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="frozen">Frozen</option>
+                    <option value="verified">Verified</option>
+                    <option value="pending">Pending Verification</option>
+                  </select>
                   <button onClick={() => setShowCreateUserModal(true)} className="px-4 py-2 bg-green-700 text-white rounded-xl text-sm font-bold flex items-center gap-2">
                     <Plus className="w-4 h-4" />
                     CREATE USER
@@ -1969,7 +2237,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F0F0]">
-                  {users.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase())).map((user) => (
+                  {users.filter(u => {
+                    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                          u.phone.includes(searchTerm);
+                    const matchesStatus = statusFilter === 'all' ||
+                                          (statusFilter === 'active' && !u.isFrozen) ||
+                                          (statusFilter === 'frozen' && u.isFrozen) ||
+                                          (statusFilter === 'verified' && u.isVerified) ||
+                                          (statusFilter === 'pending' && !u.isVerified);
+                    return matchesSearch && matchesStatus;
+                  }).map((user) => (
                     <tr key={`admin-user-${user.id}`} className="hover:bg-[#F9F9F9] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -2032,7 +2309,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                           <button 
                             onClick={() => {
                               setSelectedUserForChat(user);
-                              setActiveTab('chat');
+                              setShowChatModal(true);
                             }}
                             className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white transition-all"
                             title="Chat with User"
@@ -2913,6 +3190,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                       />
                     </div>
                     <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Password</label>
+                      <input 
+                        type="text"
+                        value={editingAgent.password || ''}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, password: e.target.value })}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        placeholder="Set agent password"
+                      />
+                    </div>
+                    <div>
                       <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Tax ID</label>
                       <input 
                         value={editingAgent.taxId || ''}
@@ -2995,14 +3282,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                         id="new-agent-workplace"
                       />
                     </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Password</label>
+                      <input 
+                        type="text"
+                        placeholder="Set agent password"
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-green-700"
+                        id="new-agent-password"
+                      />
+                    </div>
                   </div>
                   <button 
                     onClick={() => {
                       const name = (document.getElementById('new-agent-name') as HTMLInputElement).value;
                       const phone = (document.getElementById('new-agent-phone') as HTMLInputElement).value;
                       const workplace = (document.getElementById('new-agent-workplace') as HTMLInputElement).value;
+                      const password = (document.getElementById('new-agent-password') as HTMLInputElement).value;
                       if (name && phone) {
-                        handleRecruitAgent({ name, phone, workplace });
+                        handleRecruitAgent({ name, phone, workplace, password });
                       } else {
                         alert('Please fill in all fields');
                       }
@@ -3010,6 +3307,74 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                     className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-700/20"
                   >
                     Recruit Agent
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showAssignTaskModal && selectedAgentForTask && (
+            <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+              >
+                <button 
+                  onClick={() => setShowAssignTaskModal(false)}
+                  className="absolute top-6 right-6 p-2 hover:bg-[#F0F0F0] rounded-full"
+                >
+                  <XCircle className="w-5 h-5 text-[#999]" />
+                </button>
+                
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold">Assign Task</h2>
+                    <p className="text-xs text-[#999] mt-1 font-bold uppercase tracking-widest">To: {selectedAgentForTask.name}</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Task Title</label>
+                      <input 
+                        type="text"
+                        placeholder="What needs to be done?"
+                        value={newTask.title}
+                        onChange={e => setNewTask({...newTask, title: e.target.value})}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-amber-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Description</label>
+                      <textarea 
+                        placeholder="Provide more details..."
+                        value={newTask.description}
+                        onChange={e => setNewTask({...newTask, description: e.target.value})}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-amber-600 min-h-[100px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Priority</label>
+                      <select 
+                        value={newTask.priority}
+                        onChange={e => setNewTask({...newTask, priority: e.target.value as any})}
+                        className="w-full px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-bold focus:outline-none focus:border-amber-600"
+                      >
+                        <option value="low">Low Priority</option>
+                        <option value="medium">Medium Priority</option>
+                        <option value="high">High Priority</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleAssignTask}
+                    className="w-full bg-amber-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    Assign Task
                   </button>
                 </div>
               </motion.div>
@@ -3051,6 +3416,69 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, isDeveloper, onBack }
                 />
                 <button onClick={() => setShowMapModal(null)} className="w-full p-3 bg-gray-100 rounded-xl font-bold">Close</button>
               </div>
+            </div>
+          )}
+          {showChatModal && selectedUserForChat && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white w-full max-w-2xl h-[600px] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative"
+              >
+                <div className="p-4 bg-white border-b border-[#F0F0F0] flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-700 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      {selectedUserForChat.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{selectedUserForChat.name}</p>
+                      <p className="text-[10px] text-[#999] uppercase tracking-widest">Chat Session</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowChatModal(false);
+                      setSelectedUserForChat(null);
+                    }}
+                    className="p-2 hover:bg-red-50 text-red-600 rounded-full transition-colors"
+                  >
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-[#F8F9FA]">
+                  {chatMessages
+                    .filter(m => m.senderId === selectedUserForChat.id || m.receiverId === selectedUserForChat.id)
+                    .map(msg => (
+                      <div key={msg.id} className={`flex ${msg.isAdmin ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[70%] p-3 rounded-2xl text-xs font-medium ${msg.isAdmin ? 'bg-green-700 text-white rounded-tr-none' : 'bg-white border border-[#E5E5E5] rounded-tl-none'}`}>
+                          {msg.text}
+                          <p className={`text-[8px] mt-1 ${msg.isAdmin ? 'text-white/60' : 'text-[#999]'}`}>
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                
+                <div className="p-4 bg-white border-t border-[#F0F0F0] flex gap-2">
+                  <input 
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Type a message..."
+                    className="flex-1 px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-green-700"
+                  />
+                  <button 
+                    onClick={handleSendMessage}
+                    className="px-6 py-3 bg-green-700 text-white rounded-xl text-sm font-bold hover:bg-green-800 transition-colors"
+                  >
+                    Send
+                  </button>
+                </div>
+              </motion.div>
             </div>
           )}
         </AnimatePresence>

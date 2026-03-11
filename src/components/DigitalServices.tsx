@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemConfig, RecurringPayment, User, Section } from '../types';
-import CryptoWallet from './CryptoWallet';
+import { saveUserToLocalStorage } from '../utils/storage';
 
 interface DigitalServicesProps {
   onBack: () => void;
@@ -50,7 +50,6 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([]);
-  const [showCryptoWallet, setShowCryptoWallet] = useState(false);
   const [showInvestmentModal, setShowInvestmentModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [showRemittanceModal, setShowRemittanceModal] = useState(false);
@@ -113,7 +112,7 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
 
         const updatedUser = { ...currentUser, balance: currentUser.balance - amount };
         onUpdateUser(updatedUser);
-        localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+        saveUserToLocalStorage(updatedUser);
 
         try {
           // Update in users list via API
@@ -305,16 +304,6 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
                 <span className="text-[10px] font-bold text-[#666]">{bill.name}</span>
               </button>
             ))}
-            {/* Crypto Wallet Button */}
-            <button 
-              onClick={() => setShowCryptoWallet(true)}
-              className="flex flex-col items-center gap-2 group"
-            >
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 text-orange-600 bg-orange-50 border border-[#F0F0F0]">
-                <Bitcoin className="w-6 h-6" />
-              </div>
-              <span className="text-[10px] font-bold text-[#666]">Crypto</span>
-            </button>
           </div>
         </div>
 
@@ -900,16 +889,6 @@ const DigitalServices: React.FC<DigitalServicesProps> = ({ onBack, currentUser, 
               </div>
             </motion.div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* Crypto Wallet Modal */}
-      <AnimatePresence>
-        {showCryptoWallet && (
-          <CryptoWallet 
-            isOpen={showCryptoWallet} 
-            onClose={() => setShowCryptoWallet(false)} 
-          />
         )}
       </AnimatePresence>
 

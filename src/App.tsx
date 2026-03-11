@@ -20,7 +20,6 @@ import {
   Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useZoom } from './contexts/ZoomContext';
 import Home from './components/Home';
 import LoanSection from './components/LoanSection';
 import DigitalServices from './components/DigitalServices';
@@ -42,9 +41,8 @@ import RegistrationFlow from './components/RegistrationFlow';
 import AIServicesSection from './components/AIServicesSection';
 import TaxSection from './components/TaxSection';
 import LockScreen from './components/LockScreen';
-import VerticalScale from './components/VerticalScale';
-import VerticalScrollHandle from './components/VerticalScrollHandle';
 import { Section, User, SystemConfig, AppNotification, Agent } from './types';
+import { saveUserToLocalStorage, getUserFromLocalStorage, removeUserFromLocalStorage } from './utils/storage';
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<Section>(() => {
@@ -67,7 +65,6 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
-  const { zoom } = useZoom();
   const [isLocked, setIsLocked] = useState(() => {
     return sessionStorage.getItem('moneylink_is_locked') === 'true';
   });
@@ -118,21 +115,27 @@ const App: React.FC = () => {
     sessionStorage.setItem('moneylink_is_locked', String(isLocked));
   }, [isLocked]);
 
-  // Prevent accidental reloads
+  // Prevent accidental reloads - REMOVED as per user request
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (currentUser) {
-        e.preventDefault();
-        e.returnValue = ''; // Chrome requires returnValue to be set
+    // User requested to stop reload site prompts
+  }, []);
+
+  // Global error handler for MetaMask and other unhandled rejections
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && (
+        event.reason.message?.includes('MetaMask') || 
+        event.reason.message?.includes('ethereum') ||
+        event.reason.message?.includes('web3')
+      )) {
+        console.warn('Suppressed MetaMask/Web3 error:', event.reason.message);
+        event.preventDefault();
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [currentUser]);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
 
   // Idle Logout
   useEffect(() => {
@@ -210,9 +213,8 @@ const App: React.FC = () => {
       }
     }
     
-    const savedUser = localStorage.getItem('moneylink_current_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
+    const user = getUserFromLocalStorage();
+    if (user) {
       setCurrentUser(user);
       
       // Sync with backend to get latest balance/verification status
@@ -221,7 +223,7 @@ const App: React.FC = () => {
           const latest = users.find((u: any) => u.id === user.id);
           if (latest) {
             setCurrentUser(latest);
-            localStorage.setItem('moneylink_current_user', JSON.stringify(latest));
+            saveUserToLocalStorage(latest);
             
             // If user has an admin, fetch the admin's approved app name
             if (latest.adminId && !isPartner) {
@@ -292,7 +294,7 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('moneylink_current_user', JSON.stringify(user));
+    saveUserToLocalStorage(user);
     setShowLogin(false);
     setActiveSection('home'); // Direct to home page after login
   };
@@ -329,7 +331,7 @@ const App: React.FC = () => {
     setIsAdminMode(false);
     setIsAgentMode(false);
     setIsDeveloperMode(false);
-    localStorage.removeItem('moneylink_current_user');
+    removeUserFromLocalStorage();
     localStorage.removeItem('moneylink_admin_direct_login');
     localStorage.removeItem('moneylink_agent_direct_login');
     localStorage.removeItem('moneylink_current_agent_id');
@@ -364,7 +366,13 @@ const App: React.FC = () => {
             onRegister={handleLogin}
             onLogin={handleLogin}
             onAdminLogin={handleAdminLogin}
-            onAgentLogin={() => setShowAgentLogin(true)}
+            onAgentLogin={() => {
+              if (currentUser && !currentUser.isVerified) {
+                alert('Your account must be verified to access the Agent Portal.');
+                return;
+              }
+              setShowAgentLogin(true);
+            }}
             onLogout={handleLogout}
             config={config}
             onShowLogin={() => setShowLogin(true)}
@@ -381,9 +389,9 @@ const App: React.FC = () => {
       case 'trust':
         return <TrustSection onBack={() => setActiveSection('home')} config={config} />;
       case 'transactions':
-        return <TransactionsSection onBack={() => setActiveSection('home')} currentUser={currentUser} />;
+        return <TransactionsSection onBack={() => setActiveSection('home')} currentUser={currentUser} isAdmin={isAdminMode} />;
       case 'settings':
-        return <SettingsSection onBack={() => setActiveSection('home')} onNavigate={setActiveSection} onDeveloperLogin={handleDeveloperLogin} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
+        return <SettingsSection onBack={() => setActiveSection('home')} onNavigate={setActiveSection} onDeveloperLogin={handleDeveloperLogin} onAdminLogin={handleAdminLogin} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
       case 'help':
         return <HelpSection onBack={() => setActiveSection('home')} />;
       case 'ai-lab':
@@ -402,6 +410,8 @@ const App: React.FC = () => {
             setIsDeveloperMode(false);
             setActiveSection('account');
           }} 
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          hasUnreadNotifications={notifications.some(n => !n.isRead)}
         />;
       case 'agent':
         return <AgentPanel 
@@ -413,6 +423,7 @@ const App: React.FC = () => {
           }} 
           agentId={currentAgent?.id || ''} 
           isDeveloper={isDeveloperMode} 
+          appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
         />;
       default:
         return <Home 
@@ -432,11 +443,21 @@ const App: React.FC = () => {
 
   if (isAdminMode) {
     return (
-      <div>
+      <div className="min-h-screen bg-[#F8F9FA]">
         <AdminPanel 
           onBack={() => setIsAdminMode(false)}
           onLogout={() => setIsAdminMode(false)} 
           isDeveloper={isDeveloperMode} 
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          hasUnreadNotifications={notifications.some(n => !n.isRead)}
+          appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
+        />
+        <NotificationsPanel 
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          notifications={notifications}
+          onMarkAsRead={markNotificationAsRead}
+          onClearAll={clearAllNotifications}
         />
       </div>
     );
@@ -467,6 +488,7 @@ const App: React.FC = () => {
           onComplete={(user) => {
             handleLogin(user);
             setShowRegistration(false);
+            setActiveSection('home');
           }}
           onCancel={() => setShowRegistration(false)}
           onSwitchToLogin={() => {
@@ -480,7 +502,7 @@ const App: React.FC = () => {
 
   if (isAgentMode) {
     return (
-      <div>
+      <div className="min-h-screen bg-[#F8F9FA]">
         <AgentPanel 
           onBack={() => setIsAgentMode(false)}
           onLogout={() => {
@@ -488,6 +510,16 @@ const App: React.FC = () => {
             setCurrentAgent(null);
           }} 
           agentId={currentAgent?.id || ''} 
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          hasUnreadNotifications={notifications.some(n => !n.isRead)}
+          appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
+        />
+        <NotificationsPanel 
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          notifications={notifications}
+          onMarkAsRead={markNotificationAsRead}
+          onClearAll={clearAllNotifications}
         />
       </div>
     );
@@ -730,14 +762,10 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <VerticalScale />
-      <VerticalScrollHandle />
-
       {/* Main Content */}
       <main className={`w-full max-w-[1920px] mx-auto pt-24 pb-32 px-4 sm:px-6 lg:px-8 min-h-screen flex flex-col ${isDarkMode ? 'text-white' : 'text-[#1A1A1A]'}`}>
-        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
-          <div className="flex-1">
-            <AnimatePresence mode="wait">
+        <div className="flex-1 w-full h-full">
+          <AnimatePresence mode="wait">
               <motion.div
                 key={activeSection}
                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -757,7 +785,6 @@ const App: React.FC = () => {
                 {renderSection()}
               </motion.div>
             </AnimatePresence>
-          </div>
         </div>
 
         {/* Global Developer Credit */}
@@ -795,6 +822,7 @@ const App: React.FC = () => {
           <AgentLogin 
             onLogin={handleAgentLogin}
             onCancel={() => setShowAgentLogin(false)}
+            appConfig={{ name: config?.appName || 'MoneyLink Financial', logo: config?.appLogo || logo }}
           />
         )}
       </AnimatePresence>
@@ -833,9 +861,18 @@ const App: React.FC = () => {
       {/* Lock Screen */}
       <AnimatePresence>
         {isLocked && config && (
-          <LockScreen appName={config.appName} onUnlock={unlockSession} />
+          <LockScreen appName={config.appName} onUnlock={unlockSession} onLogout={handleLogout} />
         )}
       </AnimatePresence>
+
+      {/* Notifications Panel */}
+      <NotificationsPanel 
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        onMarkAsRead={markNotificationAsRead}
+        onClearAll={clearAllNotifications}
+      />
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-[#F0F0F0] z-50">

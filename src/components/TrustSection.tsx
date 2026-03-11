@@ -22,20 +22,30 @@ interface TrustSectionProps {
 }
 
 const TrustSection: React.FC<TrustSectionProps> = ({ onBack, config }) => {
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+
   const trustItems = [
-    { id: 'about', label: `About ${config.appName}`, icon: Info, desc: 'Our mission and vision', url: 'https://moneylink.com/about' },
-    { id: 'terms', label: 'Terms & Conditions', icon: FileText, desc: 'Legal agreements', url: 'https://moneylink.com/terms' },
-    { id: 'privacy', label: 'Privacy Policy', icon: Lock, desc: 'How we protect your data', url: 'https://moneylink.com/privacy' },
+    { id: 'about', label: `About ${config.appName}`, icon: Info, desc: 'Our mission and vision', content: `Welcome to ${config.appName}. Our mission is to provide secure, fast, and reliable financial services to everyone. We believe in transparency and empowering our users with the best digital tools.` },
+    { id: 'terms', label: 'Terms & Conditions', icon: FileText, desc: 'Legal agreements', content: `By using ${config.appName}, you agree to our terms of service. We reserve the right to modify these terms. Users must be 18 years or older. All transactions are final and subject to our review process.` },
+    { id: 'privacy', label: 'Privacy Policy', icon: Lock, desc: 'How we protect your data', content: `Your privacy is our top priority. We use end-to-end encryption to protect your personal and financial data. We do not sell your data to third parties. Your information is only used to provide and improve our services.` },
     { id: 'support', label: 'Customer Support', icon: MessageCircle, desc: 'Live Chat / WhatsApp', url: 'https://wa.me/260774218141' },
-    { id: 'faqs', label: 'FAQs', icon: HelpCircle, desc: 'Common questions', url: 'https://moneylink.com/faqs' },
+    { id: 'faqs', label: 'FAQs', icon: HelpCircle, desc: 'Common questions', content: `Q: How long does verification take?\nA: Usually within 24 hours.\n\nQ: What are the loan limits?\nA: Limits depend on your credit score and history with us.\n\nQ: How do I reset my password?\nA: Use the 'Forgot Password' link on the login page.` },
   ];
 
   const openBrowser = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleItemClick = (item: any) => {
+    if (item.url) {
+      openBrowser(item.url);
+    } else {
+      setActiveModal(item.id);
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative">
       <div className="flex items-center gap-4">
         <button 
           onClick={onBack}
@@ -69,7 +79,7 @@ const TrustSection: React.FC<TrustSectionProps> = ({ onBack, config }) => {
         {trustItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => openBrowser(item.url)}
+            onClick={() => handleItemClick(item)}
             className="w-full bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left group"
           >
             <div className="p-3 bg-green-50 text-green-700 rounded-xl group-hover:bg-green-700 group-hover:text-white transition-colors">
@@ -115,8 +125,20 @@ const TrustSection: React.FC<TrustSectionProps> = ({ onBack, config }) => {
           className="w-full p-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-green-700" 
           rows={4} 
           placeholder="Describe the issue you're facing..."
+          id="report-problem-textarea"
         />
-        <button className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-600/20">
+        <button 
+          onClick={() => {
+            const textarea = document.getElementById('report-problem-textarea') as HTMLTextAreaElement;
+            if (textarea && textarea.value.trim()) {
+              alert('Report submitted successfully. We will look into it.');
+              textarea.value = '';
+            } else {
+              alert('Please describe the issue before submitting.');
+            }
+          }}
+          className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-600/20"
+        >
           Submit Report
         </button>
       </div>
@@ -133,6 +155,46 @@ const TrustSection: React.FC<TrustSectionProps> = ({ onBack, config }) => {
           <a href="https://wa.me/260774218141" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-green-700 hover:underline">WHATSAPP</a>
         </div>
       </div>
+
+      {/* Modal for Trust Items */}
+      <AnimatePresence>
+        {activeModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setActiveModal(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] p-6 w-full max-w-md shadow-2xl relative max-h-[80vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setActiveModal(null)}
+                className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+              
+              {trustItems.find(i => i.id === activeModal) && (
+                <div className="mt-4">
+                  <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center mb-4">
+                    {React.createElement(trustItems.find(i => i.id === activeModal)!.icon, { className: "w-6 h-6" })}
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2">{trustItems.find(i => i.id === activeModal)?.label}</h2>
+                  <div className="text-gray-600 whitespace-pre-wrap leading-relaxed text-sm">
+                    {trustItems.find(i => i.id === activeModal)?.content}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

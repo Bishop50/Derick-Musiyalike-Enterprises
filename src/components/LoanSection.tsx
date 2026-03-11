@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  User, 
   Briefcase, 
   Shield, 
   Calculator, 
@@ -18,9 +17,11 @@ import {
   Zap,
   Sun,
   Droplets,
-  Truck
+  Truck,
+  User as UserIcon
 } from 'lucide-react';
-import { LoanRequest } from '../types';
+import { LoanRequest, User } from '../types';
+import { getUserFromLocalStorage } from '../utils/storage';
 
 import LoanCalculator from './LoanCalculator';
 
@@ -35,26 +36,60 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showStatusChangeModal, setShowStatusChangeModal] = useState(false);
+  const [loanStatusChange, setLoanStatusChange] = useState<{type: string, status: string} | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any>(null);
   const [amount, setAmount] = useState('');
   const [tenure, setTenure] = useState('6 months');
   const [loanStatusFilter, setLoanStatusFilter] = useState<string>('all');
   const [loanSortBy, setLoanSortBy] = useState<'date' | 'amount'>('date');
   const [loans, setLoans] = useState<LoanRequest[]>([]);
+  const [prevLoans, setPrevLoans] = useState<LoanRequest[]>([]);
+  const [documents, setDocuments] = useState<File[]>([]);
   
   React.useEffect(() => {
-    const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+    const currentUser = getUserFromLocalStorage();
     if (currentUser) {
       fetch(`/api/loan-requests?userId=${currentUser.id}`)
         .then(res => {
           if (!res.ok) throw new Error('Network response was not ok');
           return res.json();
         })
-        .then(data => setLoans(data))
+        .then(data => {
+            // Check for status changes
+            data.forEach((loan: LoanRequest) => {
+                const prevLoan = prevLoans.find(p => p.id === loan.id);
+                if (prevLoan && prevLoan.status !== loan.status) {
+                    setLoanStatusChange({
+                        type: loan.type,
+                        status: loan.status
+                    });
+                    setShowStatusChangeModal(true);
+                }
+            });
+            setLoans(data);
+            setPrevLoans(data);
+        })
         .catch(err => {
           console.error('Failed to fetch loans from API, falling back to local storage', err);
           const allLoans = JSON.parse(localStorage.getItem('moneylink_loan_requests') || '[]');
-          setLoans(allLoans.filter((req: LoanRequest) => req.userId === currentUser.id));
+          const userLoans = allLoans.filter((req: LoanRequest) => req.userId === currentUser.id);
+          
+          // Check for status changes in local storage
+          userLoans.forEach((loan: LoanRequest) => {
+              const prevLoan = prevLoans.find(p => p.id === loan.id);
+              if (prevLoan && prevLoan.status !== loan.status) {
+                  setLoanStatusChange({
+                      type: loan.type,
+                      status: loan.status
+                  });
+                  setShowStatusChangeModal(true);
+              }
+          });
+          
+          setLoans(userLoans);
+          setPrevLoans(userLoans);
         });
     }
   }, [activeTab, showConfirmation]);
@@ -75,7 +110,7 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
   };
 
   const submitLoan = async () => {
-    const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+    const currentUser = getUserFromLocalStorage();
     if (!currentUser) return;
 
     const newRequest: LoanRequest = {
@@ -129,7 +164,7 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
       localStorage.setItem('moneylink_admin_notifications', JSON.stringify(adminNotifications));
     }
 
-    alert('Loan application submitted successfully!');
+    setShowSuccessModal(true);
     setShowApplyForm(false);
     setShowConfirmation(false);
     setAmount('');
@@ -137,7 +172,7 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
   };
 
   const applyButtons = [
-    { id: 'personal', label: 'Personal Loan', icon: User, desc: 'For individual needs' },
+    { id: 'personal', label: 'Personal Loan', icon: UserIcon, desc: 'For individual needs' },
     { id: 'sme', label: 'SME Loan', icon: Briefcase, desc: 'Grow your business' },
     { id: 'emergency', label: 'Emergency Loan', icon: Zap, desc: 'Quick cash in 24h' },
     { id: 'collateral', label: 'Collateral Loan', icon: Shield, desc: 'Lower interest rates' },
@@ -245,6 +280,24 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
                     <option value="36 months">36 Months</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest ml-1">Upload Documents (Proof of Income, Collateral)</label>
+                  <input 
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        setDocuments(Array.from(e.target.files));
+                      }
+                    }}
+                    className="w-full px-4 py-4 bg-[#F8F9FA] border border-[#E5E5E5] rounded-2xl text-sm font-bold focus:outline-none focus:border-green-700"
+                  />
+                  {documents.length > 0 && (
+                    <div className="mt-2 text-xs text-green-700 font-bold">
+                      {documents.length} document(s) selected
+                    </div>
+                  )}
+                </div>
                 <button 
                   onClick={() => setShowConfirmation(true)}
                   disabled={!amount || parseFloat(amount) <= 0}
@@ -270,6 +323,36 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
                       <button onClick={() => setShowConfirmation(false)} className="flex-1 py-3 bg-[#F0F0F0] rounded-xl font-bold text-sm">Cancel</button>
                       <button onClick={submitLoan} className="flex-1 py-3 bg-green-700 text-white rounded-xl font-bold text-sm">Confirm</button>
                     </div>
+                  </div>
+                </div>
+              )}
+              
+              {showStatusChangeModal && loanStatusChange && (
+                <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl space-y-6 text-center">
+                    <div className={`w-20 h-20 ${loanStatusChange.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'} rounded-full flex items-center justify-center mx-auto`}>
+                      <CheckCircle2 className="w-10 h-10" />
+                    </div>
+                    <h3 className="text-xl font-bold">Loan {loanStatusChange.status === 'approved' ? 'Approved' : 'Rejected'}!</h3>
+                    <p className="text-sm text-[#666]">Your {loanStatusChange.type} loan application has been {loanStatusChange.status}.</p>
+                    <button onClick={() => setShowStatusChangeModal(false)} className="w-full py-4 bg-green-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-700/20">
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {showSuccessModal && (
+                <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl space-y-6 text-center">
+                    <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-10 h-10" />
+                    </div>
+                    <h3 className="text-xl font-bold">Application Submitted!</h3>
+                    <p className="text-sm text-[#666]">Your loan application has been submitted successfully. You will receive a notification once it is approved or rejected.</p>
+                    <button onClick={() => setShowSuccessModal(false)} className="w-full py-4 bg-green-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-700/20">
+                      View My Loans
+                    </button>
                   </div>
                 </div>
               )}
@@ -351,26 +434,50 @@ const LoanSection: React.FC<LoanSectionProps> = ({ onBack, isRegistered, config 
                 return new Date(b.date).getTime() - new Date(a.date).getTime();
               })
               .map((req: LoanRequest) => (
-                <div key={req.id} className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl ${
-                      req.status === 'approved' ? 'bg-green-50 text-green-700' : 
-                      req.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      <FileText className="w-5 h-5" />
+                <div key={req.id} className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-xl ${
+                        req.status === 'approved' ? 'bg-green-50 text-green-700' : 
+                        req.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                      }`}>
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{req.type}</p>
+                        <p className="text-[10px] text-[#999]">{req.date} • {req.tenure || 'N/A'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-sm">{req.type}</p>
-                      <p className="text-[10px] text-[#999]">{req.date} • {req.tenure || 'N/A'}</p>
+                    <div className="text-right">
+                      <p className="font-bold text-sm text-green-700">K {(req.amount || 0).toLocaleString()}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-tighter ${
+                        req.status === 'approved' ? 'text-green-600' : 
+                        req.status === 'rejected' ? 'text-red-600' : 'text-amber-600'
+                      }`}>{req.status}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm text-green-700">K {(req.amount || 0).toLocaleString()}</p>
-                    <p className={`text-[10px] font-bold uppercase tracking-tighter ${
-                      req.status === 'approved' ? 'text-green-600' : 
-                      req.status === 'rejected' ? 'text-red-600' : 'text-amber-600'
-                    }`}>{req.status}</p>
-                  </div>
+                  {req.status === 'approved' && req.amount && req.tenure && (
+                    <div className="mt-4 pt-4 border-t border-[#E5E5E5]">
+                      <h4 className="text-xs font-bold mb-3 text-[#666] uppercase tracking-widest">Repayment Schedule</h4>
+                      <div className="space-y-2">
+                        {Array.from({ length: parseInt(req.tenure) || 1 }).map((_, i) => {
+                          const monthlyPayment = (req.amount! * 1.2) / (parseInt(req.tenure!) || 1);
+                          const remaining = (req.amount! * 1.2) - (monthlyPayment * (i + 1));
+                          const date = new Date(req.date);
+                          date.setMonth(date.getMonth() + i + 1);
+                          return (
+                            <div key={i} className="flex justify-between items-center text-[10px] bg-[#F8F9FA] p-2 rounded-lg">
+                              <span className="font-bold text-[#666]">Month {i + 1} ({date.toLocaleDateString()})</span>
+                              <div className="text-right">
+                                <span className="font-black text-green-700 block">K {monthlyPayment.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <span className="text-[#999]">Bal: K {Math.max(0, remaining).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             

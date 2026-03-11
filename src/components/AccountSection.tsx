@@ -17,6 +17,7 @@ import {
   Users
 } from 'lucide-react';
 import { User, Section } from '../types';
+import { saveUserToLocalStorage } from '../utils/storage';
 
 interface AccountSectionProps {
   onBack: () => void;
@@ -49,7 +50,7 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
       
       if (res.ok) {
         const data = await res.json();
-        localStorage.setItem('moneylink_current_user', JSON.stringify(data));
+        saveUserToLocalStorage(data);
         onUpdateUser(data);
         setIsEditing(false);
         alert('Profile updated successfully!');
@@ -70,7 +71,7 @@ const AccountSection: React.FC<AccountSectionProps> = ({ onBack, onLogout, curre
       
       // Update current user session
       const updatedUser = { ...currentUser, name: editForm.name, phone: editForm.phone };
-      localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+      saveUserToLocalStorage(updatedUser);
       // Update state via callback
       onUpdateUser(updatedUser);
       

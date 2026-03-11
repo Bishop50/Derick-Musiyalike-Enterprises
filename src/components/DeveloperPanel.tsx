@@ -47,21 +47,29 @@ import {
   Send
 } from 'lucide-react';
 import { User, AIServer, SystemConfig, Admin, AppRequest, Meeting, StreamingApp, Tool, Agent, LoanRequest, ChatMessage } from '../types';
+import { saveUserToLocalStorage, getUserFromLocalStorage } from '../utils/storage';
 
 import SupportChat from './SupportChat';
 import AILab from './AILab';
 import LiveMeeting from './LiveMeeting';
-import ZoomControl from './ZoomControl';
 
 interface DeveloperPanelProps {
   onLogout: () => void;
   onBack?: () => void;
   onUpdateConfig?: (config: SystemConfig) => void;
+  onOpenNotifications?: () => void;
+  hasUnreadNotifications?: boolean;
 }
 
 import { sendPushNotification } from '../utils/notifications';
 
-const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ onLogout, onBack, onUpdateConfig }) => {
+const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ 
+  onLogout, 
+  onBack, 
+  onUpdateConfig,
+  onOpenNotifications,
+  hasUnreadNotifications
+}) => {
   const [activePanel, setActivePanel] = useState<'system' | 'users' | 'agents' | 'ai' | 'database' | 'logs' | 'toolbox' | 'invitations' | 'memory' | 'admins' | 'app-requests' | 'meetings' | 'tools' | 'streaming' | 'storage' | 'browser' | 'code-editor' | 'ai-publish' | 'loan-requests' | 'user-chat'>('system');
   const [config, setConfig] = useState<SystemConfig>({
     appName: 'MoneyLink Financial',
@@ -538,9 +546,9 @@ Development Team`);
       localStorage.setItem('moneylink_users', JSON.stringify(updatedUsers));
       
       // Update current user if they are the one being edited
-      const currentUser = JSON.parse(localStorage.getItem('moneylink_current_user') || 'null');
+      const currentUser = getUserFromLocalStorage();
       if (currentUser && currentUser.id === updatedUser.id) {
-        localStorage.setItem('moneylink_current_user', JSON.stringify(updatedUser));
+        saveUserToLocalStorage(updatedUser);
       }
       
       addLog(`User ${updatedUser.name} updated`, 'info');
@@ -734,6 +742,17 @@ Development Team`);
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {onOpenNotifications && (
+              <button 
+                onClick={onOpenNotifications}
+                className="relative p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/10 hover:border-blue-500/30 hover:text-blue-400 transition-all"
+              >
+                <Bell className="w-5 h-5" />
+                {hasUnreadNotifications && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#0A0A0A]" />
+                )}
+              </button>
+            )}
             {onBack && (
               <button 
                 onClick={onBack}
@@ -1340,7 +1359,7 @@ Development Team`);
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">AI Context Memory</h3>
                   <div className="p-4 bg-black/40 border border-white/5 rounded-xl font-mono text-[10px] text-white/60 leading-relaxed">
-                    [SYSTEM_CONTEXT]: User is logged in as {users.find(u => u.id === JSON.parse(localStorage.getItem('moneylink_current_user') || '{}').id)?.name || 'Guest'}.
+                    [SYSTEM_CONTEXT]: User is logged in as {users.find(u => u.id === getUserFromLocalStorage()?.id)?.name || 'Guest'}.
                     [SESSION_HISTORY]: User navigated to Account {'->'} Developer Panel.
                     [PREFERENCES]: Dark mode is {featureFlags.darkMode ? 'ENABLED' : 'DISABLED'}.
                   </div>

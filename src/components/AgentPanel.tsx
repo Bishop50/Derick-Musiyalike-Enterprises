@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User, ChatMessage, Agent, SystemConfig, Task, LoanRequest } from '../types';
 import SupportChat from './SupportChat';
 import LiveMeeting from './LiveMeeting';
-import ZoomControl from './ZoomControl';
 
 import { 
   Users, 
@@ -30,7 +29,9 @@ import {
   TrendingUp,
   Activity,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Bell,
+  FileDown
 } from 'lucide-react';
 
 interface AgentPanelProps {
@@ -38,11 +39,70 @@ interface AgentPanelProps {
   agentId: string;
   isDeveloper?: boolean;
   onBack?: () => void;
+  onOpenNotifications?: () => void;
+  hasUnreadNotifications?: boolean;
+  appConfig?: { name: string, logo: string };
 }
 
-const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper, onBack }) => {
+const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper, onBack, onOpenNotifications, hasUnreadNotifications, appConfig }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'medium' as 'low' | 'medium' | 'high', assignedTo: '' });
+
+  const addTask = async () => {
+    if (!newTask.title || !newTask.description) return;
+    const task: Task = {
+      id: Math.random().toString(36).substr(2, 9),
+      ...newTask,
+      assignedTo: newTask.assignedTo || agentId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task)
+      });
+      if (res.ok) {
+        const savedTask = await res.json();
+        const updatedTasks = [...tasks, savedTask];
+        setTasks(updatedTasks);
+        localStorage.setItem('moneylink_tasks', JSON.stringify(updatedTasks));
+        setNewTask({ title: '', description: '', priority: 'medium', assignedTo: '' });
+      }
+    } catch (error) {
+      console.error('Failed to add task:', error);
+      // Fallback to local storage
+      const updatedTasks = [...tasks, task];
+      setTasks(updatedTasks);
+      localStorage.setItem('moneylink_tasks', JSON.stringify(updatedTasks));
+      setNewTask({ title: '', description: '', priority: 'medium', assignedTo: '' });
+    }
+  };
+
+  const updateTaskStatus = async (id: string, status: 'pending' | 'in progress' | 'completed') => {
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        const updatedTask = await res.json();
+        const updatedTasks = tasks.map(t => t.id === id ? updatedTask : t);
+        setTasks(updatedTasks);
+        localStorage.setItem('moneylink_tasks', JSON.stringify(updatedTasks));
+      }
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      // Fallback to local storage
+      const updatedTasks = tasks.map(t => t.id === id ? { ...t, status } : t);
+      setTasks(updatedTasks);
+      localStorage.setItem('moneylink_tasks', JSON.stringify(updatedTasks));
+    }
+  };
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'users' | 'chat' | 'tasks' | 'meeting' | 'storage' | 'loan-requests' | 'dashboard'>(() => {
     return (localStorage.getItem('moneylink_agent_active_tab') as any) || 'dashboard';
@@ -132,10 +192,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
 
         if (agentsRes.ok) {
           const data = await agentsRes.json();
+          setAgents(data);
           const agent = data.find((a: Agent) => a.id === agentId);
           setCurrentAgent(agent || null);
         } else {
           const storedAgents = JSON.parse(localStorage.getItem('moneylink_agents') || '[]');
+          setAgents(storedAgents);
           const agent = storedAgents.find((a: Agent) => a.id === agentId);
           setCurrentAgent(agent || null);
         }
@@ -230,35 +292,59 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
     const loan = loanRequests.find(l => l.id === id);
     if (!loan) return;
     
-    const updated = { ...loan, status: 'approved' as const };
     try {
-      await fetch(`/api/loan-requests/${id}`, {
+      const res = await fetch(`/api/loan-requests/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
+        body: JSON.stringify({ status: 'approved' })
       });
-      setLoanRequests(prev => prev.map(l => l.id === id ? updated : l));
-      alert('Loan approved successfully!');
+      
+      if (res.ok) {
+        const updatedLoan = await res.json();
+        setLoanRequests(prev => prev.map(l => l.id === id ? updatedLoan : l));
+        
+        // Refresh users to get updated balance
+        const usersRes = await fetch('/api/users');
+        if (usersRes.ok) {
+          const allUsers = await usersRes.json();
+          setUsers(allUsers);
+        }
+        
+        alert(`Loan of K ${loan.amount} approved for ${loan.userName}.`);
+      }
     } catch (error) {
-      alert('Failed to approve loan');
+      console.error('Failed to approve loan:', error);
+      alert('Failed to approve loan. Please try again.');
     }
   };
 
   const handleRejectLoan = async (id: string) => {
-    const loan = loanRequests.find(l => l.id === id);
-    if (!loan) return;
-    
-    const updated = { ...loan, status: 'rejected' as const };
     try {
-      await fetch(`/api/loan-requests/${id}`, {
+      const res = await fetch(`/api/loan-requests/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
+        body: JSON.stringify({ status: 'rejected' })
       });
-      setLoanRequests(prev => prev.map(l => l.id === id ? updated : l));
-      alert('Loan rejected.');
+      
+      if (res.ok) {
+        const updatedLoan = await res.json();
+        setLoanRequests(prev => prev.map(l => l.id === id ? updatedLoan : l));
+        alert('Loan request rejected.');
+      }
     } catch (error) {
-      alert('Failed to reject loan');
+      console.error('Failed to reject loan:', error);
+    }
+  };
+
+  const deleteTask = async (id: string) => {
+    if (!confirm('Delete this task?')) return;
+    try {
+      const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setTasks(tasks.filter(t => t.id !== id));
+      }
+    } catch (error) {
+      console.error('Failed to delete task:', error);
     }
   };
 
@@ -307,13 +393,56 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8">
+      {/* Developer Actions Overlay */}
+      {isDeveloper && (
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
+          <button 
+            onClick={() => {
+              let dataToDownload: any = [];
+              let filename = 'data.json';
+              switch (activeTab) {
+                case 'users': dataToDownload = users; filename = 'users.json'; break;
+                case 'tasks': dataToDownload = tasks; filename = 'tasks.json'; break;
+                case 'meeting': dataToDownload = []; filename = 'meetings.json'; break;
+                case 'loan-requests': dataToDownload = loanRequests; filename = 'loan-requests.json'; break;
+                default: dataToDownload = { users, tasks, loanRequests }; filename = 'all-data.json';
+              }
+              const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="p-4 bg-black text-white rounded-full shadow-2xl hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+            title="Developer: Download Current Data"
+          >
+            <FileDown className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-purple-600/20">
-              <Headphones className="w-6 h-6" />
-            </div>
+            {appConfig?.logo ? (
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-purple-600/20 overflow-hidden border border-purple-100">
+                <img 
+                  src={appConfig.logo} 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://placehold.co/100x100/9333ea/ffffff?text=Agent";
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-12 h-12 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-purple-600/20">
+                <Headphones className="w-6 h-6" />
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-black text-[#1A1A1A]">AGENT_PANEL</h1>
               <p className="text-[10px] font-bold text-[#999] uppercase tracking-widest">
@@ -322,6 +451,17 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {onOpenNotifications && (
+              <button 
+                onClick={onOpenNotifications}
+                className="p-3 bg-white border border-[#E5E5E5] rounded-2xl hover:bg-gray-50 transition-all relative"
+              >
+                <Bell className="w-5 h-5 text-[#666]" />
+                {hasUnreadNotifications && (
+                  <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                )}
+              </button>
+            )}
             {onBack && (
               <button 
                 onClick={onBack}
@@ -919,66 +1059,135 @@ const AgentPanel: React.FC<AgentPanelProps> = ({ onLogout, agentId, isDeveloper,
           )}
 
           {activeTab === 'tasks' && (
-            <div className="p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold">Tasks</h3>
-                <button 
-                  onClick={() => {
-                    const title = prompt('Task title:');
-                    if (title) {
-                      const priority = prompt('Priority (low, medium, high):') as 'low' | 'medium' | 'high' || 'medium';
-                      const newTask: Task = {
-                        id: Math.random().toString(36).substr(2, 9),
-                        title,
-                        description: '',
-                        priority,
-                        status: 'pending',
-                        createdAt: new Date().toISOString()
-                      };
-                      setTasks([...tasks, newTask]);
-                    }
-                  }}
-                  className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Add Task
-                </button>
+            <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-[#E5E5E5]">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-black">Agent Tasks</h2>
+                  <p className="text-[#666] text-sm">Manage your daily operations and assignments</p>
+                </div>
+                <div className="flex items-center gap-2 bg-purple-50 px-4 py-2 rounded-xl border border-purple-100">
+                  <CheckCircle className="w-4 h-4 text-purple-600" />
+                  <span className="text-xs font-bold text-purple-700 uppercase tracking-widest">
+                    {tasks.filter(t => t.status === 'completed').length}/{tasks.length} Completed
+                  </span>
+                </div>
               </div>
-              <div className="space-y-4">
-                {tasks.length === 0 ? (
-                  <div className="text-center text-[#999] py-12">No tasks yet.</div>
-                ) : (
-                  tasks.map(task => (
-                    <div key={task.id} className="bg-white p-4 rounded-2xl border border-[#F0F0F0] flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold">{task.title}</h4>
-                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
-                          task.priority === 'high' ? 'bg-red-100 text-red-600' :
-                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-green-100 text-green-600'
-                        }`}>
-                          {task.priority}
-                        </span>
-                      </div>
-                      <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))} className="text-red-500">
-                        <Trash2 className="w-5 h-5" />
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Task Creation Form */}
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="p-6 bg-[#F8F9FA] rounded-[2rem] border border-[#E5E5E5] space-y-4">
+                    <h3 className="font-bold text-sm uppercase tracking-widest text-[#999]">Create New Task</h3>
+                    <div className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="Task Title" 
+                        value={newTask.title} 
+                        onChange={e => setNewTask({...newTask, title: e.target.value})} 
+                        className="w-full p-4 bg-white border border-[#E5E5E5] rounded-2xl outline-none focus:border-purple-600 font-bold text-sm" 
+                      />
+                      <textarea 
+                        placeholder="Task Description" 
+                        value={newTask.description} 
+                        onChange={e => setNewTask({...newTask, description: e.target.value})} 
+                        className="w-full p-4 bg-white border border-[#E5E5E5] rounded-2xl outline-none focus:border-purple-600 text-sm min-h-[100px]" 
+                      />
+                      <select 
+                        value={newTask.priority} 
+                        onChange={e => setNewTask({...newTask, priority: e.target.value as any})} 
+                        className="w-full p-4 bg-white border border-[#E5E5E5] rounded-2xl outline-none focus:border-purple-600 font-bold text-sm"
+                      >
+                        <option value="low">Low Priority</option>
+                        <option value="medium">Medium Priority</option>
+                        <option value="high">High Priority</option>
+                      </select>
+                      <select 
+                        value={newTask.assignedTo} 
+                        onChange={e => setNewTask({...newTask, assignedTo: e.target.value})} 
+                        className="w-full p-4 bg-white border border-[#E5E5E5] rounded-2xl outline-none focus:border-purple-600 font-bold text-sm"
+                      >
+                        <option value="">Assign to Agent</option>
+                        {agents.map(agent => (
+                          <option key={agent.id} value={agent.name}>{agent.name}</option>
+                        ))}
+                      </select>
+                      <button 
+                        onClick={addTask} 
+                        className="w-full bg-purple-600 text-white p-4 rounded-2xl font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Task
                       </button>
                     </div>
-                  ))
-                )}
+                  </div>
+                </div>
+
+                {/* Task List */}
+                <div className="lg:col-span-2 space-y-4">
+                  {tasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-[#F8F9FA] rounded-[2rem] border border-dashed border-[#E5E5E5]">
+                      <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm">
+                        <CheckCircle className="w-8 h-8 text-[#CCC]" />
+                      </div>
+                      <p className="text-[#999] font-bold">No tasks assigned yet.</p>
+                    </div>
+                  ) : (
+                    tasks.map(task => (
+                      <div key={task.id} className="p-6 bg-white border border-[#E5E5E5] rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-purple-500 transition-all group">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <h3 className="font-bold text-lg">{task.title}</h3>
+                            <span className={`px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase tracking-widest ${
+                              task.priority === 'high' ? 'bg-red-50 text-red-600' :
+                              task.priority === 'medium' ? 'bg-amber-50 text-amber-600' :
+                              'bg-green-50 text-green-600'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                          <p className="text-sm text-[#666] leading-relaxed">{task.description}</p>
+                          <div className="flex items-center gap-4 text-[10px] text-[#999] font-bold uppercase tracking-widest">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(task.createdAt).toLocaleDateString()}
+                            </span>
+                            {task.assignedTo && (
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                Agent: {task.assignedTo}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <select 
+                            value={task.status} 
+                            onChange={e => updateTaskStatus(task.id, e.target.value as any)} 
+                            className={`p-3 border rounded-xl font-bold text-xs outline-none transition-all ${
+                              task.status === 'completed' ? 'bg-green-50 border-green-200 text-green-700' :
+                              task.status === 'in progress' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                              'bg-gray-50 border-gray-200 text-gray-700'
+                            }`}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="in progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                          <button 
+                            onClick={() => deleteTask(task.id)}
+                            className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           )}
-
-          {activeTab === 'meeting' && (
-            <div className="h-[600px] relative">
-              <LiveMeeting 
-                userId={agentId}
-                userName={currentAgent?.name || 'Agent'}
-                onLeave={() => setActiveTab('users')}
-              />
-            </div>
-          )}
-
+          
           {activeTab === 'storage' && (
             <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-[#E5E5E5]">
               <div className="flex items-center justify-between mb-8">

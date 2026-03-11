@@ -111,7 +111,7 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
     
     // Save user message in background
     try {
-      await fetch('/api/chat-messages', {
+      await fetch(`/api/chat-messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...msg, chatId })
@@ -145,7 +145,7 @@ const SupportChat: React.FC<SupportChatProps> = ({ currentUser, role = 'user', c
         localStorage.setItem(`moneylink_chats_${chatId}`, JSON.stringify(finalMessages));
         
         // Save AI message in background
-        fetch('/api/chat-messages', {
+        fetch(`/api/chat-messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...aiMsg, chatId })

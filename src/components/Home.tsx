@@ -18,7 +18,8 @@ import {
   Headphones,
   Video,
   Sparkles,
-  Zap
+  Zap,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Section, Transaction, User, LoanRequest, SystemConfig } from '../types';
@@ -26,6 +27,20 @@ import DataList from './DataList';
 import QuickActionButton from './QuickActionButton';
 import LiveMeeting from './LiveMeeting';
 import SupportChat from './SupportChat';
+
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
+} from 'recharts';
 
 interface HomeProps {
   onNavigate: (section: Section) => void;
@@ -264,6 +279,15 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
     { id: 'account', label: 'My Account', icon: UserIcon, color: 'bg-white', textColor: 'text-[#1A1A1A]', onClick: () => onNavigate('account') },
   ];
 
+  const chartData = [
+    { name: 'Jan', balance: 4000, savings: 2400 },
+    { name: 'Feb', balance: 3000, savings: 1398 },
+    { name: 'Mar', balance: 2000, savings: 9800 },
+    { name: 'Apr', balance: 2780, savings: 3908 },
+    { name: 'May', balance: 1890, savings: 4800 },
+    { name: 'Jun', balance: 2390, savings: 3800 },
+  ];
+
   if (!config) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center">
@@ -273,7 +297,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-24">
       {/* Live Meeting Component */}
       {showLiveMeeting && currentUser && (
         <LiveMeeting 
@@ -283,7 +307,126 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
         />
       )}
 
-      {/* App Logo / Welcome Image */}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">
+            {currentUser ? `Hello, ${currentUser.name.split(' ')[0]}` : 'Welcome'}
+          </h1>
+          <p className="text-[#666] text-sm mt-1">Your financial overview for today.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => onNavigate('notifications')}
+            className="p-3 bg-white border border-[#E5E5E5] rounded-2xl hover:bg-gray-50 transition-all relative"
+          >
+            <Bell className="w-5 h-5 text-[#666]" />
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          </button>
+          <button 
+            onClick={() => onNavigate('account')}
+            className="w-12 h-12 bg-green-700 text-white rounded-2xl flex items-center justify-center font-bold shadow-lg shadow-green-700/20"
+          >
+            {currentUser ? currentUser.name.charAt(0) : <UserIcon className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Balance Card */}
+      <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="bg-green-700 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-green-700/30 relative overflow-hidden"
+      >
+        <div className="relative z-10">
+          <div className="flex justify-between items-start mb-8">
+            <div>
+              <p className="text-green-200 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Total Balance</p>
+              <h2 className="text-5xl font-black tracking-tighter">{balance}</h2>
+            </div>
+            <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
+              <Wallet className="w-6 h-6" />
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => onNavigate('transactions')}
+              className="flex-1 bg-white text-green-700 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-green-50 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Add Money
+            </button>
+            <button 
+              onClick={() => onNavigate('apply-loan')}
+              className="flex-1 bg-green-800/50 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-green-800 transition-all border border-white/10"
+            >
+              <CreditCard className="w-4 h-4" />
+              Quick Loan
+            </button>
+          </div>
+        </div>
+        
+        {/* Decorative elements */}
+        <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-48 h-48 bg-green-900/40 rounded-full blur-2xl"></div>
+      </motion.div>
+
+      {/* Financial Insights (Charts) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-[#E5E5E5] shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-sm">Balance History</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-700 rounded-full"></span>
+              <span className="text-[10px] text-[#999] font-bold uppercase">6 Months</span>
+            </div>
+          </div>
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#15803d" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#15803d" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#999'}} />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                />
+                <Area type="monotone" dataKey="balance" stroke="#15803d" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[2.5rem] border border-[#E5E5E5] shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-sm">Savings Growth</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+              <span className="text-[10px] text-[#999] font-bold uppercase">Target Met</span>
+            </div>
+          </div>
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#999'}} />
+                <YAxis hide />
+                <Tooltip 
+                  cursor={{fill: '#F8F9FA'}}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                />
+                <Bar dataKey="savings" fill="#2563eb" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
       <div className="flex flex-col items-center justify-center mb-4 space-y-4">
         <div className="relative">
           <img 
@@ -391,7 +534,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
             >
               <button 
                 onClick={() => setShowLoanModal(false)}
@@ -460,7 +603,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, currentUser, onRegister, onLogi
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative"
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
             >
               <button 
                 onClick={() => setShowRepayModal(false)}

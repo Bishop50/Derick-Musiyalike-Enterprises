@@ -18,7 +18,7 @@ interface LoanCalculatorProps {
 const LoanCalculator: React.FC<LoanCalculatorProps> = ({ onBack }) => {
   const [amount, setAmount] = useState<number>(5000);
   const [tenure, setTenure] = useState<number>(12); // months
-  const [interestRate, setInterestRate] = useState<number>(15); // annual percentage
+  const [interestRate, setInterestRate] = useState<number>(20); // annual percentage
   const [monthlyPayment, setMonthlyPayment] = useState<number>(0);
   const [totalPayment, setTotalPayment] = useState<number>(0);
   const [totalInterest, setTotalInterest] = useState<number>(0);
@@ -132,16 +132,16 @@ const LoanCalculator: React.FC<LoanCalculatorProps> = ({ onBack }) => {
           </div>
           <input 
             type="range"
-            min="5"
-            max="35"
+            min="20"
+            max="50"
             step="0.5"
             value={interestRate}
             onChange={(e) => setInterestRate(parseFloat(e.target.value))}
             className="w-full h-2 bg-[#F0F0F0] rounded-lg appearance-none cursor-pointer accent-green-700"
           />
           <div className="flex justify-between text-[8px] font-bold text-[#CCC] uppercase tracking-widest">
-            <span>5%</span>
-            <span>35%</span>
+            <span>20%</span>
+            <span>50%</span>
           </div>
         </div>
       </div>

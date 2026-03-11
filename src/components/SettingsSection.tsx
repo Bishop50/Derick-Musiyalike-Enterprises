@@ -1,24 +1,23 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Moon, Sun, Terminal, ShieldCheck, X as CloseIcon, Users, Info, Download } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Terminal, Shield, ShieldCheck, X as CloseIcon, Users, Info, Download } from 'lucide-react';
 import { Section } from '../types';
 import AppIconViewer from './AppIconViewer';
-import { useZoom } from '../contexts/ZoomContext';
 
 interface SettingsSectionProps {
   onBack: () => void;
   onNavigate: (section: Section) => void;
   onDeveloperLogin?: () => void;
+  onAdminLogin?: () => void;
   isDarkMode: boolean;
   setIsDarkMode: (isDarkMode: boolean) => void;
 }
 
-const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, onDeveloperLogin, isDarkMode, setIsDarkMode }) => {
+const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, onDeveloperLogin, onAdminLogin, isDarkMode, setIsDarkMode }) => {
   const [showDevLogin, setShowDevLogin] = useState(false);
   const [devUsername, setDevUsername] = useState('');
   const [devPassword, setDevPassword] = useState('');
   const [devError, setDevError] = useState('');
   const [showIconViewer, setShowIconViewer] = useState(false);
-  const { zoom, setZoom } = useZoom();
   const [config, setConfig] = useState<any>({
     appName: 'MoneyLink',
     appLogo: 'https://storage.googleapis.com/static.aistudio.google.com/content/2026/02/25/08/46/27/95/96/image.png',
@@ -42,6 +41,12 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, o
   };
 
   const handleDevLogin = () => {
+    if (devUsername === '709580' && devPassword === '709580') {
+      if (onAdminLogin) {
+        onAdminLogin();
+      }
+      return;
+    }
     if (devUsername === 'BISHOP' && devPassword === 'DERICK') {
       if (onDeveloperLogin) {
         onDeveloperLogin();
@@ -112,17 +117,37 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, o
           </p>
         </div>
 
-        <h3 className="font-bold text-sm mb-4 mt-6">Zoom Level</h3>
-        <input 
-          type="range" 
-          min="0.5" 
-          max="1.5" 
-          step="0.1" 
-          value={zoom} 
-          onChange={(e) => setZoom(parseFloat(e.target.value))} 
-          className="w-full"
-        />
-        <p className="text-xs text-[#666] mt-2">Current Zoom: {Math.round(zoom * 100)}%</p>
+      </div>
+
+      <div className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm space-y-4">
+        <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-green-700" />
+          Security Settings
+        </h3>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-bold text-[#999] uppercase tracking-widest">Session Lock PIN (4 Digits)</label>
+            <input 
+              type="password"
+              maxLength={4}
+              value={localStorage.getItem('moneylink_user_pin') || ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                if (val.length <= 4) {
+                  localStorage.setItem('moneylink_user_pin', val);
+                  // Force re-render to show updated value
+                  setGeminiKey(geminiKey + ' ');
+                  setTimeout(() => setGeminiKey(geminiKey.trim()), 0);
+                }
+              }}
+              placeholder="Enter 4-digit PIN"
+              className="px-4 py-3 bg-[#F8F9FA] border border-[#E5E5E5] rounded-xl text-sm font-medium focus:outline-none focus:border-green-700"
+            />
+          </div>
+          <p className="text-[10px] text-[#999] leading-relaxed">
+            Set a 4-digit PIN to lock your session when idle. You can also use this PIN to log in quickly.
+          </p>
+        </div>
       </div>
 
       <div className="bg-white p-6 rounded-[2rem] border border-[#E5E5E5] shadow-sm space-y-4">
@@ -188,7 +213,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ onBack, onNavigate, o
               onClick={() => {
                 const url = new URL(window.location.href);
                 url.searchParams.set('mode', 'dmi');
-                window.location.href = url.toString();
+                window.open(url.toString(), '_blank');
               }}
               className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all"
             >

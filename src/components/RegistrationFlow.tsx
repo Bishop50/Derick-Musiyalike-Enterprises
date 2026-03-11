@@ -85,6 +85,17 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
 
   const [otpError, setOtpError] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [resendTimer, setResendTimer] = useState(60);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (step === 'otp' && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, resendTimer]);
 
   const handlePhoneSubmit = async () => {
     if (phoneNumber.length >= 9) {
@@ -238,14 +249,18 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
 
     try {
       // Save to backend
+      console.log('Sending registration request to /api/users');
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser)
       });
+      console.log('Registration request sent, status:', response.status);
 
       if (!response.ok) {
-        throw new Error('Failed to save user to server');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Registration failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save user to server');
       }
 
       // Send Welcome Notification via API
@@ -288,19 +303,28 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
   const handleCompleteRegistration = async () => {
     const user = await handleComplete();
     if (user) {
-      onComplete(user);
+      setStep('success');
     }
   };
+
+  useEffect(() => {
+    if (step === 'success' && registeredUser) {
+      const timer = setTimeout(() => {
+        onComplete(registeredUser);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, registeredUser, onComplete]);
 
   const steps: Step[] = ['phone', 'otp', 'password', 'nrc', 'passport', 'selfie', 'success'];
   const currentStepIndex = steps.indexOf(step);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4 py-12">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl relative"
+        className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl relative"
       >
         <button 
           onClick={onCancel}
@@ -310,6 +334,18 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
         </button>
 
         <div className="p-8">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center border-2 border-green-100 shadow-md overflow-hidden">
+              <img 
+                src={appConfig.logo} 
+                alt="Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://placehold.co/200x200/15803d/ffffff?text=LM";
+                }}
+              />
+            </div>
+          </div>
           {/* Progress Bar */}
           <div className="flex gap-2 mb-8">
             {steps.filter(s => s !== 'success').map((s, i) => (
@@ -467,7 +503,19 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                   ))}
                 </div>
                 <div className="text-center">
-                  <button className="text-green-700 text-xs font-bold hover:underline">Resend Code in 0:59</button>
+                  <button 
+                    onClick={() => {
+                      if (resendTimer === 0) {
+                        const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                        setGeneratedOtp(newOtp);
+                        setResendTimer(60);
+                      }
+                    }}
+                    disabled={resendTimer > 0}
+                    className={`text-xs font-bold ${resendTimer > 0 ? 'text-gray-400' : 'text-green-700 hover:underline'}`}
+                  >
+                    {resendTimer > 0 ? `Resend Code in 0:${resendTimer.toString().padStart(2, '0')}` : 'Resend Code'}
+                  </button>
                 </div>
                 <button 
                   onClick={handleOtpSubmit}
@@ -785,7 +833,7 @@ const RegistrationFlow: React.FC<RegistrationFlowProps> = ({ onComplete, onCance
                     onClick={() => registeredUser && onComplete(registeredUser)}
                     className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all"
                   >
-                    Go to Dashboard
+                    Complete Registration
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   {onSwitchToLogin && (

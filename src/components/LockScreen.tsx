@@ -4,25 +4,48 @@ import { motion } from 'motion/react';
 
 interface LockScreenProps {
   onUnlock: () => void;
+  onLogout: () => void;
   appName: string;
 }
 
-const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, appName }) => {
+const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onLogout, appName }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
+  const [isCreating, setIsCreating] = useState(!localStorage.getItem('moneylink_user_pin'));
+  const [confirmPin, setConfirmPin] = useState('');
+  const [step, setStep] = useState<'enter' | 'confirm'>(isCreating ? 'enter' : 'enter');
 
   useEffect(() => {
     if (pin.length === 4) {
-      handleUnlock();
+      if (isCreating) {
+        if (step === 'enter') {
+          setConfirmPin(pin);
+          setPin('');
+          setStep('confirm');
+        } else {
+          if (pin === confirmPin) {
+            localStorage.setItem('moneylink_user_pin', pin);
+            onUnlock();
+          } else {
+            setError('PINs do not match');
+            setPin('');
+            setConfirmPin('');
+            setStep('enter');
+          }
+        }
+      } else {
+        handleUnlock();
+      }
     }
   }, [pin]);
 
   const handleUnlock = () => {
-    // In a real app, validate against user's actual PIN
-    // For this demo, we accept any 4-digit PIN, or a specific one like '1234'
-    // But to be user-friendly in a demo, we'll just unlock after 4 digits
-    if (pin.length === 4) {
+    const savedPin = localStorage.getItem('moneylink_user_pin');
+    if (savedPin && pin === savedPin) {
+      onUnlock();
+    } else if (!savedPin && pin.length === 4) {
+      // Fallback if somehow they got here without a pin set
       onUnlock();
     } else {
       setError('Invalid PIN');
@@ -110,7 +133,17 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, appName }) => {
           </button>
         </div>
 
-        <p className="mt-12 text-[10px] text-gray-600 font-bold uppercase tracking-widest">
+        <button 
+          onClick={() => {
+            sessionStorage.removeItem('moneylink_is_locked');
+            onLogout();
+          }}
+          className="mt-8 text-xs font-bold text-gray-400 hover:text-white transition-colors"
+        >
+          Return to Home Page
+        </button>
+
+        <p className="mt-8 text-[10px] text-gray-600 font-bold uppercase tracking-widest">
           Protected by MoneyLink Security
         </p>
       </motion.div>
